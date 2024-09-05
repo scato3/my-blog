@@ -34,6 +34,17 @@ export const metadata: Metadata = {
   title: "HyunSu | Frontend Engineer",
   description: "hyunsu.dev, 프론트엔드 개발자의 블로그",
   openGraph: {
-    images: "/main.jpg",
+    type: "website",
+    url: "https://hyunsu-dev.vercel.app",
+    title: "HyunSu | Frontend Engineer",
+    description: "hyunsu.dev, 프론트엔드 개발자의 블로그",
+    images: [
+      {
+        url: "/main.png",
+        width: 800,
+        height: 800,
+        alt: "블로그 메인 이미지",
+      },
+    ],
   },
 };
