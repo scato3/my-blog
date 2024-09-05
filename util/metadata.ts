@@ -15,13 +15,13 @@ interface MetadataProps {
   };
 }
 
-const webUrl = "https://hyunsu.dev";
+const webUrl = "https://hyunsu-dev.vercel.app";
 
-const defaultImage = `/main.png`;
+const defaultImage = `/main.jpg`;
 
 export default function metadata(props: MetadataProps): Metadata {
   const { title, description: desc, path, image, label1, label2 } = props;
-  const description = desc + " | 미량의 개발 블로그, hyunsu.dev";
+  const description = desc + " | 현수 개발 블로그, hyunsu.dev";
 
   const images = webUrl + (image ?? defaultImage);
 
@@ -32,7 +32,7 @@ export default function metadata(props: MetadataProps): Metadata {
       title,
       description,
       url: webUrl + path,
-      siteName: "hyunsu.dev",
+      siteName: "hyunsu-dev.vercel.app",
       images,
       locale: "ko_KR",
     },

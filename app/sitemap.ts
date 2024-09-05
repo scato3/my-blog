@@ -6,7 +6,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     (a, b) => Number(new Date(b.date)) - Number(new Date(a.date))
   );
 
-  const webUrl = "https://hyunsu.dev";
+  const webUrl = "https://hyunsu-dev.vercel.app";
 
   const blogPosts =
     posts?.map((post) => ({
