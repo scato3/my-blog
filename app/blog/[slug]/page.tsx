@@ -3,6 +3,7 @@ import { allBlogs } from "contentlayer/generated";
 import type { Metadata } from "next";
 import { Mdx } from "./components/mdx";
 import metadata from "@/util/metadata";
+import UtterancesComments from "./components/UtterancesComments";
 
 interface Props {
   params: {
@@ -24,6 +25,14 @@ export default async function DocPage({ params }: Props) {
       </h1>
       <time className="text-gray-500 text-sm mt-2 ml-auto">{post.date}</time>
       <Mdx code={post.body.code} />
+      <div id="comments" className="mt-8">
+        <UtterancesComments
+          repo="scato3/comments"
+          issueTerm="pathname"
+          label="comments"
+          theme="github-light"
+        />
+      </div>
     </div>
   );
 }
