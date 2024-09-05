@@ -33,4 +33,7 @@ export default function RootLayout({
 export const metadata: Metadata = {
   title: "HyunSu | Frontend Engineer",
   description: "hyunsu.dev, 프론트엔드 개발자의 블로그",
+  openGraph: {
+    images: "/main.png",
+  },
 };
