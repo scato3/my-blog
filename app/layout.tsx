@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     description: "hyunsu.dev, 프론트엔드 개발자의 블로그",
     images: [
       {
-        url: "/main.jpg",
+        url: "https://hyunsu-dev.vercel.app/main.jpg",
         width: 800,
         height: 800,
         alt: "블로그 메인 이미지",
