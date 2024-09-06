@@ -1,0 +1,63 @@
+---
+title: Next.js에서 Google Analytics를 적용해 사용자 패턴 분석하기 (Next.js 14)
+date: 2024-08-27
+description: Google Analytics를 적용하여 사용자 경험(UX)을 개선해보자!
+thumbnailUrl: /posts/thumbnail/icon-google-analytics.png
+---
+
+![](/posts/thumbnail/icon-google-analytics.png)
+
+<h3 className="text-center">
+  Next.js 14 + @next/third-parties로 Google Analytics를 적용하는 포스팅입니다.
+</h3>
+
+<h5 className="text-center">
+  Next.js의 Official Third-Party Component 사용하기 Next.js에서는 더 쉽게
+  third-party 라이브러리와 통합할 수 있는 공식적인 컴포넌트를 제공합니다.
+</h5>
+
+## 계정 설정하기
+
+---
+
+1. [Google Analytics]에 접속하여 가입을 한 후 좌측 하단에 위치한 관리 페이지에 들어갑니다.
+
+2. 좌측 상단의 만들기 > 속성에 진입합니다.
+
+![](/posts/analytics-example.png)
+
+![](/posts/analytics-example2.png)
+
+3. 위 페이지에서 G-로 시작하는 gaId를 **획득** 합니다.
+
+4. 다음과 같이 GoogleAnalytics를 gaId와 위치시키면 성공입니다.
+
+```tsx
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="ko" className={suit.className} suppressHydrationWarning>
+      <body className="max-w-screen-md min-w-[320px] mx-auto">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <main className="flex flex-col">
+            <Header />
+            {children}
+          </main>
+        </ThemeProvider>
+        <Footer />
+        <GoogleAnalytics gaId="G-DW10GT8R1L" />
+      </body>
+    </html>
+  );
+}
+```
+
+[Google Analytics]: https://analytics.google.com/

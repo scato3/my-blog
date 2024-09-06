@@ -4,6 +4,7 @@ import { suit } from "./style/fonts/suit";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { ThemeProvider } from "./components/theme-provider";
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
           </main>
         </ThemeProvider>
         <Footer />
+        <GoogleAnalytics gaId="G-XYZ" />
       </body>
     </html>
   );
