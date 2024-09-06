@@ -26,7 +26,9 @@ export default function RootLayout({
           </main>
         </ThemeProvider>
         <Footer />
-        <GoogleAnalytics gaId="G-XYZ" />
+        <GoogleAnalytics
+          gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID as string}
+        />
       </body>
     </html>
   );
