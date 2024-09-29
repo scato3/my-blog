@@ -1,0 +1,478 @@
+---
+title: 리액트 핵심 요소 깊게 살펴보기
+date: 2024-09-12
+description: 리액트 딥다이브 4주차
+thumbnailUrl: /posts/thumbnail/react-deep-dive.png
+---
+
+[리액트 딥다이브 스터디]를 현재 진행하고 있습니다. 이 내용을 포스팅하여 공유하고자 합니다.
+
+![](/posts/thumbnail/react-deep-dive.png)
+
+## 3.1 리액트의 모든 훅 파헤치기
+
+함수 컴포넌트가 상태를 사용하거나 클래스 컴포넌트의 생명주기 메서드를 대체하는 등의 다양한 작업을 하기 위해 훅이라는 것이 추가됐습니다.
+
+훅은 클래스 컴포넌트에서만 가능했던 state, ref 등 리액트의 핵심적인 기능을 함수에서도 가능하게 만들었습니다.
+
+### 3.1.1 useState
+
+useState는 함수 컴포넌트 내부에서 상태를 정의하고, 이 상태를 관리할 수 있게 해주는 훅입니다.
+
+#### useState 구현 살펴보기
+
+useState의 인수로는 state의 초깃값을 넘겨주며 아무것도 넘겨주지 않으면 초깃값은 undefined입니다.
+
+useState를 사용하지 않고 함수 내부에서 변수를 사용해 상태값을 관리하는 상황에 대해 알아본다면
+
+```js
+function Component() {
+  let state = "hello";
+
+  function handleButtonClick() {
+    state = "hi";
+  }
+
+  return (
+    <>
+      <h1>{state}</h1>
+      <button onClick={handleButtonClick}>hi</button>
+    </>
+  );
+}
+```
+
+이는 작동하지 않는다. 그 이유는 리렌더링을 발생시키기 위한 조건을 전혀 충족시키지 못하기 때문이다. state는 일반 자바스크립트 변수기 때문에 값이 변경되더라도 React는 이를 감지하지 못합니다.
+버튼을 클릭해 state 값을 변경하더라도 React는 컴포넌트를 다시 렌더링하지 않기 때문에 UI는 업데이트가 되지 않습니다.
+
+```js
+function Component() {
+  const [_, triggerRender] = useState();
+  let state = "hello";
+
+  function handleButtonClick() {
+    state = "hi";
+    triggerRender();
+  }
+
+  return (
+    <>
+      <h1>{state}</h1>
+      <button onClick={handleButtonClick}>hi</button>
+    </>
+  );
+}
+```
+
+useState 반환값의 두 번째 원소를 실행해 리액트에서 렌더링이 일어나게끔 변경하였습니다. 그럼에도 state의 변경된 값이 렌더링이 되지 않는데 이 이유는 리액트의 렌더링은 함수 컴포넌트에서 반환한 결과물인 return의 값을 비교해 실행하기 때문입니다.
+즉 렌더링이 발생될 때마다 함수는 다시 새롭게 실행이 되고 함수의 내부의 값은 함수가 실행될 때마다 다시 초기화가 됩니다.
+즉 state는 단순한 로컬 변수로 컴포넌트가 다시 렌더링 될 때마다 초기값으로 재 설정되어 state에서 hi로 변경하더라도 다시 hello로 변경되게 됩니다.
+
+useState가 어떤 구조를 가지고 있을지 추측해본다면
+
+```js
+function useState(initialValue) {
+  let internalState = initialValue;
+
+  function setState(newValue) {
+    internalState = newValue;
+  }
+
+  return [internalState, setState];
+}
+```
+
+```js
+const [value, setValue] = useState(0);
+setValue(1);
+console.log(value); // 0
+```
+
+왜 우리가 예상한대로 값이 나오지 않을까 이는 구조 분해 할당을 통하여 value의 값을 이미 할당을 하더라도 훅 내부의 setState를 호출하더라도 새로운 값을 반환하지 못합니다
+즉 사용자가 정의한 useState 함수에서 internalState는 함수 내의 로컬 변수입니다.
+React 컴포넌트는 렌더링될 때마다 함수가 다시 호출됩니다. 따라서 useState도 매번 새로 호출되며 internalState는 항상 initialValue로 초기화됩니다.
+상태 변화가 렌더링 간에 유지되지 않습니다.
+
+이를 해결하기 위하여 state를 함수로 바꿔서 state의 값을 호출할 때마다 현재 state를 반환하게 하면 됩니다.
+
+```js
+function useState(initialValue) {
+  let internalState = initialValue;
+  function state() {
+    return internalState;
+  }
+
+  function setState(newValue) {
+    internalState = newValue;
+  }
+
+  return [state, setState];
+}
+
+const [value, setValue] = useState(0);
+setValue(1);
+console.log(value()); // 1
+```
+
+이는 useState와 동 떨어진 모습으로 구현되어있다. 이는 state를 함수가 아닌 상수처럼 사용하고 있기 때문이다.
+
+이를 해결하기 위하여 클로저를 이용했으며 어떤 함수 내부에 선언된 함수가 함수가 실행이 종료된 이후에도 지역변수인 state를 계속 차모할 수 있음을 의미합니다.
+
+### 게으른 초기화
+
+대부분 useState()의 인수로 원시값을 넣는 경우가 대부분인데 함수를 인수로 넣어줄 수도 있습니다. 이를 게으른 초기화라고 합니다.
+
+```js
+const [count, setCount] = useState(Number.parseInt(window.localStorage.geItem(cacheKey)),
+
+// 게으른 초기화
+const [count, setCount] = useState(() => Number.parseInt(window.localStorage.geItem(cacheKey)), )
+)
+```
+
+이는 useState의 초깃값이 복잡하거나 무거운 연산을 포함하고 있을 때 사용하라고 되어있습니다.
+
+### 3.1.2 useEffect
+
+useEffect의 정의를 대부분의 개발자에게 묻는다면 다음과 같이 답할 것입니다.
+
+- useEffect는 두 개의 인수를 받는데, 첫 번째는 콜백, 두 번째는 의존성 배열이다. 이 두 번째 의존성 배열의 값이 변경되면 첫 번째 인수인 콜백을 실행합니다.
+
+- 클래스 컴포넌트의 생명주기 메서드와 비슷한 작동을 구현할 수 있으며 두 번째 의존성 배열에 빈 배열을 넣으면 컴포넌트가 마운트 될 때만 실행됩니다.
+
+- useEffect는 클린업 함수를 반환할 수 있는데, 이 함수는 컴포넌트가 언마운트될 때 실행됩니다.
+
+이는 어느정도 옳지만 완전히 정확하지는 않습니다. 생명주기를 대체하기 위해 만들어진 훅도 아닙니다. useEffect는 컴포넌트의 여러 값들을 활용해 동기적으로 사이드 이펙트를 만드는 메커니즘입니다.
+
+#### useEffect란?
+
+```js
+function Component() {
+  // ...
+  useEffect(() => {
+    //do something
+  }, [props, state]);
+}
+```
+
+첫 번째 인수로는 실행할 부수 효과가 포함된 함수, 두 번째 인수로는 의존성 배열을 전달합니다.
+
+어떻게 useEffect는 의존성 배열이 변경된 것을 알고 실행될까요? 기억해야 할 점은 함수 컴포넌트는 매번 함수를 실행해 렌더링을 수행한다는 점입니다.
+
+```js
+function Component() {
+  const [counter, setCounter] = useState(0);
+
+  function handleClick() {
+    setCounter((prev) => prev + 1);
+  }
+
+  useEffect(() => {
+    console.log(counter);
+  }, [counter]);
+
+  return (
+    <>
+      <h1>{counter}</h1>
+      <button onClick={handleClick}>+</button>
+    </>
+  );
+}
+```
+
+useEffect는 렌더링할 때마다 의존성에 있는 값을 보면서 이 의존성 값이 이전과 다른게 하나라도 있으면 사이드 이펙트를 실행하는 평범한 함수입니다.
+
+#### 클린업 함수의 목적
+
+클린업 함수라 불리는 useEffect 내에서 반환하는 함수는 정확히 무엇이고 어떤 일을 할까요?
+
+```js
+function App() {
+  const [counter, setCounter] = useState(0);
+
+  function handleClick() {
+    setCounter((prev) => prev + 1);
+  }
+
+  useEffect(() => {
+    function addMouseEvent() {
+      console.log(counter);
+    }
+
+    window.addEventListener("click", addMouseEvent);
+
+    return () => {
+      console.log("클린업 함수 실행!", counter);
+      window.removeEventListener("click", addMouseEvent);
+    };
+  }, [counter]);
+
+  return (
+    <>
+      <h1>{counter}</h1>
+      <button onClick={handleClick}>+</button>
+    </>
+  );
+}
+```
+
+이는 다음과 같이 실행됩니다.
+
+```
+클린업 함수 실행! 0
+1
+
+클린업 함수 실행! 1
+2
+
+클린업 함수 실행! 2
+3
+
+클린업 함수 실행! 3
+4
+// ...
+```
+
+클린업 함수는 이전 counter 값, 즉 이전 state를 참조해 실행된다는 것을 알 수 있습니다.
+
+클린업 함수는 새로운 값을 기반으로 렌더링 뒤에 실행되지만 이 변경된 값을 읽는것이 아니라 함수가 정의됐을 당시에 이전 값을 보고 실행되는 점입니다.
+
+이 사실을 종합하면 useEffect에 이벤트를 추가했을 때 클린업 함수에서 지워야 하는지 알 수 있습니다.
+
+함수 컴포넌트의 useEffect는 그 콜백이 실행될 때마다 이전의 클린업 함수가 존재한다면 그 클린업 함수를 실행한 뒤에 콜백을 실행합니다.
+
+이는 이벤트 핸들러가 무한히 추가되는 것을 방지할 수 있습니다.
+
+클린업 함수는 언마운트라기보다는 함수 컴포넌트가 리렌더링 됐을 때 의존성 변화가 있었을 당시 이전의 값을 기준으로 실행되는 개념으로 이해해야 합니다.
+
+#### 의존성 배열
+
+의존성 배열은 보통 빈 배열을 두거나, 아예 아무런 값도 넘기지 않거나, 혹은 사용자가 직접 원하는 값을 넘길 수 있습니다.
+
+만약 빈 배열을 둔다면 리액트는 최초 렌더링 직후에 실행된 이후 더 이상 실행되지 않습니다.
+
+#### 왜 useEffect의 콜백 인수로 비동기 함수를 바로 넣을 수 없을까?
+
+useEffect 내부에서 state를 결과에 따라 업데이트하는 로직이 있다고 가정해봤을 때 useEffect의 인수로 비동기 함수가 사용 가능하다면 비동기 함수의 응답 속도에 따라 결과가 이상하게 나타날 수 있습니다.
+
+극단적인 예제로 이전 state 기반의 응답이 10초가 걸렸고, 이후 바뀐 state 기반의 응답이 1초 뒤에 왔다면 이전 state 기반의 결과가 나오는 불상사가 생길 수 있습니다.
+
+이를 useEffect의 경쟁 상태라고 합니다.
+
+```js
+useEffect(async () => {
+  const res = await fetch("http://some.data.com");
+  const result = await res.json();
+  setData(result);
+}, []);
+```
+
+### 3.1.3 useMemo
+
+useMemo는 비용이 큰 연산에 대해 결과를 메모이제이션해두고 이 저장된 값을 반환하는 훅입니다.
+
+첫 번째 인수로는 어떠한 값을 반환하는 생성 함수를, 두 번째 인수로는 해당 함수가 의존하는 값의 배열을 전달합니다.
+
+useMemo는 렌더링 발생 시 의존성 배열의 값이 변경되지 않았다면 함수를 재실행하지 않고 기억해 둔 해당 값을 반환하고
+
+의존성 배열의 값이 변경됐다면 첫 번재 인수의 함수를 실행한 후에 값을 반환하고 그 값을 다시 기억해 둘 것입니다.
+
+### 3.1.4 useCallback
+
+useMemo가 값을 기억했다면 useCallback은 인수로 넘겨받은 콜백 자체를 기억합니다.
+
+useCallback은 특정 함수를 새로 만들지 않고 다시 재사용한다는 의미입니다.
+
+### 3.1.5 useRef
+
+useRef는 useState와 동일하게 컴포넌트 내부에서 렌더링이 일어나도 변경 가능한 상태값을 저장한다는 공통점이 있습니다.
+
+하지만 구분되는 큰 차이점 두 가지를 가지고 있습니다.
+
+- useRef는 반환값인 객체 내부에 있는 current로 값에 접근 또는 변경할 수 있습니다.
+- useRef는 그 값이 변하더라도 렌더링을 발생시키지 않습니다.
+
+```js
+function RefComponent() {
+  const count = useRef(0);
+
+  function handleClick() {
+    count.current += 1;
+  }
+
+  // 버튼을 아무리 눌러도 count 값이 렌더링됮 ㅣ않습니다.
+  return <button onClick={handleButtonClick}>{count.current}</button>;
+}
+```
+
+useRef를 사용하지 안호 함수 외부에서 값을 선언해서 관리하는 것도 동일한 기능을 수행할 수 있지 않을까요?
+
+이 방식은 일단 value라는 값이 기본적으로 존재하게 됩니다. 또한 Component가 여러 번 생성된다면 각 컴포넌트가 가리키는 값이 모두 value로 동일합니다.
+
+컴포넌트가 초기화가되는 지점이 다르더라도 하나의 값을 바라 봐야 하는 경우라면 유효할 수 있지만 대부분은 컴포넌트 인스턴스 하나당 하나의 값을 필요로 하는 것이 일반적입니다.
+
+이를 모두 극복할 수 있는 리액트식 접근법이 useRef입니다. 컴포넌트가 렌더링될 때만 생성되며, 인스턴스가 여러 개라도 각각 별개의 값을 바라봅니다.
+
+가장 일반적인 사용 예는 DOM에 접근하고 싶을 때 일 것입니다.
+
+```js
+function RefComponent() {
+  const inputRef = useRef();
+
+  console.log(inputRef.current);
+
+  useEffect(() => {
+    console.log(inputRef.current);
+  }, [inputRef]);
+
+  return <input ref={inputRef} type="text" />;
+}
+```
+
+useRef는 최초에 넘겨받는 기본값이 있습니다. DOM이 아니라 useRef로 넘겨받은 인수라는 점입니다.
+useRef가 선언된 당시에는 아직 컴포넌트가 렌더링되기 전이기 때문에 undefined입니다.
+
+### 3.1.6 useContxt
+
+#### Context란?
+
+리액트 애플리케이션은 기본적으로 부모 컴포넌트와 자식 컴포넌트로 이루어진 트리 구조를 갖고 있기 때문에 부모가 가진 데이터를 자식에서 사용하고 싶다면 props로 데이터를 넘겨주는 것이 일반적입니다.
+
+거리가 멀어질수록 코드는 복잡해집니다.
+
+```js
+<A props={something}>
+  <B props={something}>
+    <C props={something}>
+      <D props={something} />
+    </C>
+  </B>
+</A>
+```
+
+A 컴포넌트에서 제공하는 데이터를 D에서 사용하려면 필요한 위치까지 계속해서 넘겨야 합니다. 이러한 기법을 props drilling이라고 합니다.
+
+콘텍스트를 사용하면 이러한 명시적인 props 전달 없이도 선언한 하위 컴포넌트 모두에서 자유롭게 원하는 값을 사용할 수 있습니다.
+
+#### Cntenxt를 함수 컴포넌트에서 사용할 수 있게 해주는 useContext 훅
+
+```js
+const Context = (createContext < { hello: string }) | (undefined > undefined);
+
+function ParentComponent() {
+  return (
+    <>
+      <Context.Provider value={{ hello: "react" }}>
+        <Context.Provider value={{ hello: "javascript" }}>
+          <ChildComponent />
+        </Context.Provider>
+      </Context.Provider>
+    </>
+  );
+}
+
+function ChildComponent() {
+  const value = useContext(Context);
+
+  return <>{value ? value.hello : ""}</>;
+}
+```
+
+useContext는 상위 컴포넌트에서 만들어진 Context를 함수 컴포넌트에서 사용할 수 있게 만들어졌습니다.
+
+useContext를 사용하면 상위 컴포넌트 어딘가에서 선언된 Context.Provider에서 제공한 값을 사용할 수 있게 됩니다.
+
+만약 여러 개의 Provider가 있다면 가장 가까운 Provider의 값을 가져오게 됩니다.
+
+#### useContext를 쓸 때 주의해야할 점
+
+useContext를 함수 컴포넌트 내부에서 사용할 때는 컴포넌트 재활용이 어려워진다는 점을 염두해 두어야합니다.
+
+useContext를 선언하면 Provider에 의존성을 가지고 있는 셈이 되므로 아무데서나 재활용하기 어려운 컴포넌트가 됩니다.
+
+이러한 상황을 방지하기 위해선 useContext를 최대한 작게 하거나 재사용되지 않을만한 컴포넌트에서 사용해야 합니다.
+
+### 3.1.7 useReducer
+
+useReducer는 useState의 심화 버전으로 볼 수 있습니다. useState와 비슷한 형태를 띠지만 좀 더 복잡한 상태값을 미리 정의 해놓은 시나리오에 따라 관리할 수 있습니다.
+
+useReducer의 목적은 간단합니다. 복잡한 형태의 state를 사전에 정의된 dispatcher로만 수정할 수 있게 만들어 줌으로써 state 값에 대한 접근은 컴포넌트에서만 가능하게 하고
+
+이를 업데이트 하는 방법에 대한 상세 정의는 컴포넌트 밖에다 둔 다음 state의 업데이트를 미리 정의해 둔 dispatcher로만 제한하는 것입니다.
+
+```js
+import React, { useReducer } from "react";
+
+// 1. 리듀서 함수 정의
+function reducer(state, action) {
+  switch (action.type) {
+    case "increment":
+      return { count: state.count + 1 };
+    case "decrement":
+      return { count: state.count - 1 };
+    case "reset":
+      return { count: 0 };
+    default:
+      throw new Error("Unknown action type");
+  }
+}
+
+function Counter() {
+  // 2. useReducer 훅 사용 (초기 상태는 { count: 0 })
+  const [state, dispatch] = useReducer(reducer, { count: 0 });
+
+  return (
+    <div>
+      <p>Count: {state.count}</p>
+      {/* 3. 액션 디스패치 */}
+      <button onClick={() => dispatch({ type: "increment" })}>+</button>
+      <button onClick={() => dispatch({ type: "decrement" })}>-</button>
+      <button onClick={() => dispatch({ type: "reset" })}>Reset</button>
+    </div>
+  );
+}
+
+export default Counter;
+```
+
+#### forwardRef 살펴보기
+
+ref는 useRef에서 반환한 객체로 리액트 컴포넌트의 props인 ref에 넣어 HTMLElement에 접근하는 용도로 흔히 사용됩니다.
+
+key와 마찬가지로 ref도 리액트에서 컴포넌트의 props로 사용할 수 있는 예약어로서 별도로 선언돼 있지 않아도 사용할 수 있습니다.
+
+만약 이러한 ref를 상위 컴포넌트에서 하위 컴포넌트로 전달하고 싶다면 어떻게 해야 할까요? 즉 상위 컴포넌트에서는 접근하고 싶은 ref가 있지만
+
+이를 직접 props로 넣어 사용할 수 없을 때는 어떻게 해야 할까요?
+
+```js
+import React, { useRef, forwardRef } from "react";
+
+// 1. 하위 컴포넌트에서 forwardRef를 사용하여 ref를 전달받음
+const ChildComponent = forwardRef((props, ref) => {
+  return <input ref={ref} type="text" placeholder="Enter something..." />;
+});
+
+function ParentComponent() {
+  // 2. 상위 컴포넌트에서 ref 생성
+  const inputRef = useRef(null);
+
+  const focusInput = () => {
+    // 3. ref를 통해 하위 컴포넌트의 input에 직접 접근
+    if (inputRef.current) {
+      inputRef.current.focus(); // input에 포커스
+    }
+  };
+
+  return (
+    <div>
+      <ChildComponent ref={inputRef} />
+      <button onClick={focusInput}>Focus Input</button>
+    </div>
+  );
+}
+
+export default ParentComponent;
+```
+
+[리액트 딥다이브 스터디]: https://github.com/scato3/React-Deep-Dive-Study
