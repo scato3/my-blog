@@ -1,0 +1,529 @@
+---
+title: 서버 사이드 렌더링
+date: 2024-09-19
+description: 리액트 딥다이브 5주차
+thumbnailUrl: /posts/thumbnail/react-deep-dive.png
+---
+
+[리액트 딥다이브 스터디]를 현재 진행하고 있습니다. 이 내용을 포스팅하여 공유하고자 합니다.
+
+![](/posts/thumbnail/react-deep-dive.png)
+
+## 4.1 서버 사이드 렌더링이란?
+
+### 4.1.1 싱글 페이지 애플리케이션의 세상
+
+싱글 페이지 어플리케이션이란 렌더리와 라우팅에 필요한 대부분의 기능을 서버가 아닌 브라우저의 자바스크립트에 의존하는 방식을 의미합니다. 최초에 첫 페이지에서 데이터를 모두 불러온 이후에는 페이지 전환을 위한 모든 작업이 자바스크립트와 브라우저의 history.pushState와 history.replaceState로 이뤄지기 때문에 페이지를 불러온 이후에는 서버에서 HTML을 내려받지 않고 하나의 페이지에서 모든 작업을 처리하므로 싱글 페이지 애플리케이션이라 합니다.
+
+이러한 작동 방식은 최초에 로딩해야 할 자바스크립트 리소스가 커지는 단점이 있지만 한번 로딩된 이후에는 서버를 거쳐 필요한 리소스를 받아올 일이 적어지기 때문에 사용자에게 훌륭한 UI/UX를 제공하는 장점이 있습니다.
+
+#### 싱글 페이지 렌더링 방식의 유행과 JAM 스택의 등장
+
+과거 PHP나 JSP를 기반으로 대부분의 웹 애플리케이션이 만들어졌을 때는 거의 대부분의 렌더링이 서버 사이드에서 이뤄졌습니다. 페이지를 요청하면 서버에서 완성된 HTML을 내려받고, 또 페이지 이동이 있으면 새로운 페이지를 서버에서 내려받는 방식이었습니다.
+여기서의 자바스크립트는 추가적인 경험을 주기 위한 보조적인 수단으로 사용됐습니다.
+
+자바스크립트가 다양한 작업을 수행하게 되면서 자바스크립트를 모듈화하는 방안이 점차 논의되기 시작됐고 그에 따라 등장한 것이 CommonJS와 AMD입니다.
+
+이러한 변함에 힘입어 자바스크립트의 역할을 더욱 가중시켰고 React의 시대가 오게 되었습니다. UX를 더 낫게 제공하는거 뿐만 아니라 프로트엔드 개발자에게 좀 더 나은 개발 경험을 제공했습니다.
+
+이러한 싱글 페이지 애플리케이션의 유행으로 새롭게 생겨난 용어가 있으니 JAM(JavaScript, API, Markup)스택 입니다.
+
+대부분의 작업을 자바스크립트에서 수행할 수 있었기 때문에 프론트엔드는 자바스크립트와 마크업(HTML, CSS)을 미리 빌드해 두고 정적으로 사용자에게 제공하면 서버 확장성 문제에서 좀 더 자유로워질 수 있게 됩니다.
+
+많은 양의 자바스크립트 코드가 리소스로 넘어오면서 파싱을 위해 CPU를 소비하는 시간이 눈에 띄게 증가했습니다.
+
+### 4.1.2 서버 사이드 렌더링이란?
+
+점차 웹페이지가 느려지는 상황에 대한 문제의식을 싱글 페이지 어플리케이션의 태생적인 한계에서 찾고 이를 개선하고자 서버에서 페이지를 렌더링해 제공하는 기존 방식의 웹 개발이 다시금 떠오르고 있습니다.
+
+싱글 페이지 애플리케이션과 서버에서 페이지를 빌드하는 서버 사이드 렌더링의 차이는 웹 페이지 렌더링의 책임을 어디에 두느냐입니다. 싱글 페이지 애플리케이션은 사용자에게 제공되는 자바스킙트 번들에서 렌더링을 담당하지만 서버 사이드 방식을 채택하면 렌더링에 필요한 작업을 모두 서버에서 수행합니다.
+
+### 서버 사이드 렌더링의 장점
+
+<strong>최초 페이지 진입이 비교적 빠르다.</strong>
+
+사용자가 최초 페이지에 진입했을 때 유의미한 정보가 그려지는 시간(FCP)이 더 빨라질 수 있습니다. 화면 렌더링이 HTTP 요청에 의존적이거나 렌더링해야 할 HTML의 크기가 커진다면 상대적으로 서버 사이드 렌더링이 더 빠를 수 있습니다.
+
+<strong>검색 엔진과 SNS 공유 등 메타데이터 제공이 쉽다.</strong>
+
+서버 사이드 렌더링은 검색 엔진 최적화에 유용합니다. 검색 엔진이 사이트에서 필요한 정보를 가져가는 과정을 알아야 합니다.
+
+- 검색 엔진 로봇이 페이지에 진입합니다.
+- 페이지가 HTML 정보를 제공해 로봇이 HTML을 다운로드 합니다. 자바스크립트 코드는 실행하지 않습니다.
+- 다운로드한 HTML 내부의 오픈 그래프나 메타 태그 정보를 기반으로 페이지의 검색 정보를 가져오고 이를 바탕으로 검색 엔진에 저장합니다.
+
+싱글 페이지 어플리케이션은 대부분의 작동이 자바스크립트에 의존하는데 반해 서버 사이드 렌더링은 최초의 렌더링 작업이 서버에서 일어납니다. 따라서 검색 엔진 최적화에 대응하기가 매우 용이합니다.
+
+<strong>누적 레이아웃 이동이 적다.</strong>
+
+서버 사이드 렌더링은 누적 레이아웃 이동(CLS)을 줄일 수 있습니다. CLS는 사용자에게 페이지를 보여준 이후에 뒤늦게 HTML 정보가 변경됐을 때 화면이 덜컥 거리는 것과 같은 부정적인 사용자 경험을 말합니다.
+
+신문 기사를 제공하는 사이트를 예로 든다면 화면 전체에 기사 내용이 있고, 중간에 가로로 긴 배너를 삽입하고자 하였을 때 기사(글)로딩은 빨리 이뤄져서 화면에 먼저 노출되고 뒤늦게 배너가 로딩된다면 배너의 크기만큼 글 영역이 밀리면서 사용자에게 불편을 초래할 것입니다.이를 적절히 처리해두지 않으면 CLS 문제가 발생할 수 있는 반면에 서버 사이드 렌더링의 경우에는 이러한 요청이 완전히 완료된 이후에 완성된 페이지를 제공하므로 이러한 문제에서 비교적 자유롭습니다.
+
+<strong>사용자의 디바이스 성능에 비교적 자유롭다.</strong>
+
+자바스크립트 리소스 실행은 사용자의 디바이스에서만 실행되므로 절대적으로 사용자의 디바이스 성능에 의존적입니다. 하지만 서버 사이드 렌더링을 수행하면 이러한 부담을 서버에 나눌 수 있으므로 디바이스 성능으로부터 조금 더 자유로워 질 수 있습니다.
+
+<strong>보안에 좀 더 안전하다.</strong>
+
+JAM 스택을 채택한 프로젝트의 공통된 문제점은 애플리케이션의 모든 활동이 브라우저에 노출된다는 것입니다. 서버 사이드 렌더링은 인증 혹은 민감한 작업을 서버에서 수행하고 그 결과만 브라우저에 제공해 보안 위협을 피할 수 있다는 장점이 있습니다.
+
+### 단점
+
+<strong>소스코드를 작성할 때 항상 서버를 고려해야 합니다.</strong>
+
+서버 사이드 렌더링을 적용하기로 결정했다면 서버 환경에 대한 고려가 필요합니다. 브라우저 전역 객체인 window 또는 sessionStorage와 같이 브라우저에만 있는 전역 객체 등입니다. 서버에서 실행된다면 'window is not defined'라는 에러를 마주하게 됩니다.
+
+<strong>적절한 서버가 구축돼 있어야 합니다.</strong>
+
+<strong>서비스 지연에 따른 문제</strong>
+
+예를들어 싱글 페이지 애플리케이션에서 느린 작업이 있다고 해보자. 이는 최초에 어떤 화면이라도 보여준 상태에서 무언가 느린 작업이 수행되기 때문에 '로딩 중'과 같이 작업이 진행 중임을 적절히 안내한다면 기다릴 여지가 있습니다.
+
+하지만 서버 사이드 렌더링에서 지연이 일어난다면 사용자에게 보유줄 페이지에 대한 렌더링이 끝나기전까지는 어떠한 정보도 제공할 수 없습니다.
+
+### 4.1.3 SPA와 SSR을 모두 알아야 하는 이유
+
+<strong>SSR역시 만능이 아니다.</strong>
+
+클라이언트에서 발생하는 모든 무거운 작업을 서버에 미룬다고 해서 성능 문제가 해결되는 것은 아닙니다.
+
+두 방법론 중 어느 것이 옳다고 단언할 수는 없지만 적어도 SPA와 모든 페이지를 각각 빌드하는 SSR 방식인 MPA에 대해서는 두 가지 모두다 장단점이 있으며 어느 하나가 완벽하다고 볼 수 없습니다.
+
+<strong>현대의 SSR</strong>
+
+요즘의 SSR은 최초 웹 사이트 진입 시에는 SSR 방식으로 완성된 HTML을 제공받고, 이후 라우팅에서는 서버에서 내려받은 자바스크립트를 바탕으로 마치 SPA처럼 작동합니다.
+
+### 4.1.4 정리
+
+SSR은 무엇이고 어떠한 장단점이 있는지 확인하였습니다. 두 가지를 모두 이해하고 필요에 따라 맞는 방법을 사용할 수 있습니다.
+
+### 4.3 Next.js 톺아보기
+
+#### 4.3.1 Next.js란?
+
+Next.js란 Vercel이라는 미국 스타트업에서 만든 풀스택 웹 애플리케이션을 구축하기 위한 리액트 기반 프레임워크입니다. PHP에 영감을 받아 만들어졌다고 하는 것을 볼 때 서버 사이드 렌더링을 염두에 뒀던 것으로 보입니다.
+
+<strong>next.config.js</strong>
+
+이 파일은 Next.js의 프로젝트 환경 설정을 담당합니다.
+
+최근 Next.js는 ES모듈을 따르기 때문에 .mjs 파일을 사용합니다.
+
+```ts
+/** @type {import('next').NextConfig} */
+const nextConfig = {};
+// Next.js 13 이후 부터는 reactStrictMode와 swcMinify가 기본값으로 true로 되어 있습니다.
+// reactStrictMode : 리액트의 엄격 모드와 관련된 옵션
+// swcMinify: Vercel에서 번들링과 컴파일을 더욱 더 빠르게 수행하기 위해 사용되며 Babel 대신 사용됩니다.
+
+export default nextConfig;
+```
+
+### Page Routing
+
+<strong>pages/\_app.tsx</strong>
+
+\_app.tsx, 내부에 있는 default export로 내보낸 함수는 애플리케이션의 전체 페이지의 시작점입니다. 이곳에서 할 수 있는 내용은 다음과 같습니다.
+
+- 에러 바운더리를 사용해 애플리케이션 전역에서 발생하는 에러 처리
+- reset.css 같은 전역 CSS 선언
+- 모든 페이지에 공통으로 사용 또는 제공해야 하는 데이터 제공 등
+
+이곳에서 console.log을 추가해서 기록하면 브라우저 콘솔창이 아닌 터미널에 기록되는 것을 알 수 있습니다. 여기에서 페이지를 전환하면 더 이상 서버에서 로깅되지 않고 브라우저에 로깅되는 것을 알 수 있습니다. 이를 통해 최초에는 SSR을 이후에는 클라이언트에서 실행되는 것을 알 수 있습니다.
+
+### App Routing
+
+- \_app.tsx대신 app/layout.tsx 파일을 사용합니다.
+- 레이아웃을 사용해 전체 페이지에 적용될 요소들을 관리합니다.
+
+```ts
+// app/layout.tsx
+import './globals.css'; // 전역 CSS 선언
+
+export const metadata = {
+  title: 'My App',
+  description: 'Next.js 14 App Router example',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+<strong>pages/\_document.tsx</strong>
+
+\_app.tsx가 애플리케이션 페이지 전체를 초기화하는 곳이라면, \_document.tsx는 애플리케이션의 HTML을 초기화하는 곳입니다.
+
+\_app.tsx와 \_document.tsx의 차이점을 요약하자면 다음과 같습니다. \_app.tsx는 Next.js 설정과 관련된 코드를 모아두는 곳이며, 경우에 따라 서버 클라이언트 모두에서 렌더링 될 수 있습니다. \_document.tsx는 Next.js 만드는 웹사이트 뼈대가 되는 HTML 설정과 관련된 코드를 추가하는 곳이며, 반드시 서버에서만 렌더링 됩니다.
+
+### App Routing
+
+app/layout에서 그 기능을 담당합니다.
+
+```ts
+// app/layout.tsx
+export const metadata = {
+  title: 'My App',
+  description: 'This is a Next.js 14 application',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+- html, head, body 태그를 관리할 수 있습니다.
+- 메타데이터를 선언할 수 있으며, 이 값은 head 내부에 자동으로 추가됩니다.
+
+서버 클라이언트 모두에서 실행되는 \_app.tsx와 다르게 App Routing의 layout.tsx는 서버에서만 실행되고 클라이언트에서만 실행되는 로직은 'use client'를 사용한 컴포넌트에서 처리해야 합니다.
+
+<strong>pages/\_error.tsx</strong>
+
+클라이언트에서 발생하는 에러 또는 서버에서 발생하는 500 에러를 처리할 목적으로 만들어졌습니다. Next.js 프로젝트 전역에서 발생하는 에러를 적절하게 처리하고 싶으면 이 페이지를 활용하면 됩니다. 프로덕션으로 빌드해야지만 확인할 수 있습니다.
+
+### App Routing
+
+App Router에서는 각 경로마다 `error.tsx` 파일을 추가하여 해당 경로에서 발생하는 에러를 처리할 수 있습니다. Root에 존재하는 `error.tsx`는 애플리케이션 전체에서 발생하는 에러를 처리합니다.
+
+<strong>pages/404.tsx</strong>
+
+404 페이지를 정의할 수 있는 파일입니다.
+
+### App Routing
+
+`not-found.tsx`를 통해 404 페이지를 정의할 수 있습니다.
+
+<strong>pages/500.tsx</strong>
+
+서버에서 발생하는 에러를 핸들링하는 페이지입니다. \_error.tsx와 500.tsx가 모두 있다면 500.tsx가 먼저 실행되게 됩니다.
+
+### App Routing
+
+`500.tsx`대신 `error.tsx`를 사용하여 500에러를 처리합니다.
+
+<strong>pages/index.tsx</strong>
+
+개발자가 자유롭게 명칭을 지정해 만들 수 있는 페이지 입니다.
+
+/pages 디렉터리를 기초로 구성되며, 각 페이지에 있는 default export로 내보낸 함수가 해당 페이지의 루트 컴포넌트가 됩니다.
+
+- /pages/index.tsx : 웹사이트의 루트이며, localhost:3000과 같은 루트 주소를 의미합니다.
+
+- /pages/hello.tsx: /pages가 생략되고, 파일명이 주소가 됩니다.
+
+- /pages/hello/world.tsx: localhost:3000/hello/world로 접근이 가능합니다.
+
+- /pages/hello/[greeting].tsx: []의 의미는 어떠한 문자도 올 수 있다는 의미입니다. greeting이라는 변수에 사용자가 접속한 주소명이 오게 됩니다. localhost:3000/hello/1, localhost:3000/hello/gretting 모두 유효합니다.
+
+- /pages/hi/[...props].tsx: 자바스크립트의 전개 연산자와 동일합니다. /hi를 제외한 /hi 하위의 모든 주소가 여기로 오게 됩니다. localhost:3000/hi/hello, localhost:3000/hi/hello/world, localhost:3000,hi/hello/world/foo 등이 여기로 오게 됩니다. 이 ...props 값은 props라는 변수에 배열로 오게 됩니다.
+
+```ts
+import { useRouter } from 'next/router'
+import { useEffect } from 'react'
+import { NextPageContext } from 'next'
+
+export default function HiAll({ props: serverProps }: { props: string[] }) {
+  const {
+    query: { props },
+  } = useRouter()
+
+  useEffect(() => {
+
+    console.log(props)
+    console.log(JSON.stringify(props) === JSON.stringify(serverProps)) // true
+  }, [props, serverProps])
+
+  return (
+    <>
+      hi{' '}
+      <ul>
+        {serverProps.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
+export const getServerSideProps = (context: NextPageContext) => {
+  const {
+    query: { props },
+  } = context
+
+  return {
+    props: {
+      props,
+    },
+  }
+}
+```
+
+위 페이지를 다음과 같은 주소로 접근하면 props에 다음과 같은 값이 담기게 됩니다.
+
+/hi/1:['1']
+/hi/1/2: ['1','2']
+/hi/1/2/3: ['1','2','3']
+
+주소에 숫자를 입력했다고 해서 숫자로 형변환 되지 않습니다.
+
+### App Routing
+
+```ts
+// app/hi/[...props]/page.tsx
+import { PropsList } from './props-list';
+
+export default function HiAllPage({
+  params,
+}: {
+  params: { props?: string[] };
+}) {
+  const serverProps = params.props || [];
+
+  return (
+    <>
+      <h1>hi</h1>
+      <PropsList serverProps={serverProps} />
+    </>
+  );
+}
+```
+
+```ts
+// app/hi/[...props]/props-list.tsx
+'use client';
+
+import { useEffect } from 'react';
+
+export function PropsList({ serverProps }: { serverProps: string[] }) {
+  useEffect(() => {
+    console.log(serverProps); // 서버에서 전달된 props
+  }, [serverProps]);
+
+  return (
+    <ul>
+      {serverProps.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+#### 서버 라우팅과 클라이언트 라우팅의 차이
+
+Next.js는 SSR을 수행하지만 SPA와 같이 클라이언트 라우팅또한 수행합니다.
+
+```ts
+export default function Hello() {
+  console.log(typeof window === "undefined" ? "서버" : "클라이언트");
+
+  return <>hello</>
+}
+
+export const getServerSideProps = () => {
+    return {
+        props: {},
+    }
+}
+```
+
+콘솔 문구가 실행한 서버에서 기록되며, window가 undefined기 때문에 '서버'라는 문제가 기록될 것입니다.
+
+`next/link`는 Next.js에서 제공하는 라우팅 컴포넌트이며 `<a/>` 태그와 비슷한 동작을 합니다. a태그는 잠시 깜빡인 이후에 페이지 라우팅을 하지만 후자는 매끄럽게 전환을 합니다.
+
+a태그는 서버에서 렌더링을 수행하고 클라이언트에서도 hydrate하는 과정에서 한번 더 실행됩니다.
+
+next/link로 이동하는 경우 SSR이 아닌 클라이언트에서 필요한 자바스크립트만 불러온 뒤 라우팅하는 클라이언트 라우팅/렌더링 방식으로 작동합니다. Next.js는 서버 사이드 렌더링의 장점 즉 사용자가 최초 페이지를 빠르게 볼 수 있게끔 제공한다는 점과 SPA의 장점인 자연스러운 라우팅이라는 두 가지 장점을 모두 살리기 위해 이처럼 작동합니다.
+
+- `a`태그 대신 `Link`를 사용합니다.
+- window.location.push 대신 router.push를 사용합니다.
+
+### Hydration이란?
+
+SSR된 HTML을 클라이언트에서 다시 활성화 하는 과정을 Hydration이라고 합니다.
+
+서버에서 미리 렌더링된 정적인 HTML에 동적인 JS를 연결하여 인터랙티브 페이지로 만드는 과정입니다.
+
+- SSR에서는 서버가 React 컴포넌트를 렌더링하여 정적인 HTML을 생성하고 이를 클라이언트로 전송합니다.
+
+- 이 HTML은 브라우저에서 즉시 렌더링되어 빠르게 화면에 표시됩니다. 하지만, 이 시점에서는 자바스크립트가 아직 실행되지 않기 때문에 인터랙티브한 기능은 작동하지 않습니다. -클라이언트는 서버에서 렌더링된 HTML을 받은 후, React의 자바스크립트가 실행되면서 Hydration이 시작됩니다.
+- 클라이언트 측에서 React는 서버가 보낸 HTML 구조와 동일한 구조의 React 컴포넌트 트리를 클라이언트에서 다시 한 번 생성합니다.
+- 클라이언트에서 React는 처음부터 빈 상태에서 React 컴포넌트를 다시 렌더링하고 서버에서 제공된 HTML과 비교하여 차이점을 찾습니다.
+
+- 클라이언트에서 React는 서버에서 렌더링된 HTML과 클라이언트에서 렌더링된 React 컴포넌트 트리를 비교합니다. 이 과정을 `Reconciliation(조정)`이라고 부릅니다.
+
+- 만약 서버에서 생성된 HTML과 클라이언트에서 생성된 React 트리 사이에 차이가 있다면, React는 그 차이를 찾아서 클라이언트 측에서 재조정합니다. 이 과정에서 일부 DOM 요소가 재생성되거나 업데이트될 수 있습니다.
+
+<strong>페이지에서 getServerSideProps를 제거하면 어떻게 될까?</strong>
+
+빌드한 뒤 실행해 보면 어떠한 방식으로 접근해도 a, Link에 상관없이 서버에 로그가 남지 않습니다.
+
+### App Routing
+
+`getServerSideProps` 없이 자동으로 SSR로 렌더링이 되기 때문에 서버에 로그가 남게 됩니다.
+
+<strong>/pages/api/hello.ts</strong>
+
+서버의 api를 정의하는 폴더입니다. /api/hello로 호출할 수 있으며 다른 pages 파일과 다르게 HTML 요청만 하는것이 아니라 서버 요청을 주고 받을 수 있습니다.
+
+```ts
+import type { NextApiRequest, NextApiResponse } from "next";
+
+interface Data {
+  name: string;
+}
+
+export default function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<Data>
+) {
+  res.status(200).json({ name: "John Doe" });
+}
+```
+
+다음 코드는 서버에서만 실행됩니다. 일반적인 프로젝트를 만들 때 /api를 작성할 일이 거의 없겠지만 풀스택 애플리케이션이나 BFF(backend-for-frontend) 형태로 활용하면 사용할 수 있습니다.
+
+### 4.3.3 Data Fetching
+
+#### getStaticPaths, getStaticProps
+
+이 두 함수는 어떠한 페이지를 게시판과 같이 정적으로 결정된 페이지를 보여주고자 할 때 사용되는 함수입니다. 예를 들어 `/pages/post/[id]`와 같은 페이지에 있고 두 함수를 사용했다고 가정하겠습니다.
+
+```ts
+import { getStaticPaths, GetStaticProps } from "next";
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  return {
+    paths: [{ params: { id: "1" } }, { params: { id: "2" } }],
+    fallback: false,
+  };
+};
+
+export const getStaticProps: GetStaticProps = async ({ params }) => {
+  const { id } = params;
+  const post = await fetchPost(id);
+
+  return {
+    props: { post },
+  };
+};
+
+export default function Post({ post: { post: Post } }) {
+  // post로 페이지를 렌더링한다.
+}
+```
+
+getStaticPaths는 접근 가능한 주소를 정의하는 함수입니다. 이 페이지는 /post/1, /post/2만 접근 가능합니다. 이 외으 페이지는 404를 반환합니다.
+
+getStaticProps는 정의한 페이지를 기준으로 해당 페이지로 요청이 왔을 때 제공할 props를 반환하는 함수입니다. 예제에서는 id가 각각 1과 2로 제한돼 있기 때문에 fetchPost(1), fetchPost(2)를 기준으로 각각 함수의 응답 결과를 변수로 가져와 props의 `{post}`로 반환하게 됩니다.
+
+Post는 앞서 getStaticProps가 반환한 post를 렌더링하는 역할을 합니다.
+
+즉 getStaticPaths는 id를 1,2만 허용하며 getStaticProps는 1과 2에 대한 데이터 요청을 수행해 props로 반환한 다음 Post는 이 결과를 바탕으로 페이지를 렌더링 합니다.
+
+### App Routing
+
+```ts
+import { fetchPost } from '@/lib/api';
+import { notFound } from 'next/navigation';
+
+// generateStaticParams 함수로 SSG할 경로 지정
+export async function generateStaticParams() {
+  return [
+    { id: "1" },
+    { id: "2" }
+  ];
+}
+
+export const revalidate = 60; // 추가하면 ISR
+
+export default async function PostPage({ params }: { params: { id: string } }) {
+  const post = await fetchPost(params.id);
+
+  if (!post) {
+    notFound();
+  }
+
+  return (
+    <div>
+      <h1>{post.title}</h1>
+      <p>{post.content}</p>
+    </div>
+  );
+}
+```
+
+현재는 getStaticPaths, getStaticProps를 지원하지 않습니다. 대신 generateStaticParams를 통해서 SSG 페이지를 만들 수 있습니다.
+
+<strong>getServerSideProps</strong>
+
+앞서 두 함수가 정적엔 페이지 제공을 위해 사용된다면 getServerSideProps는 서버에서 실행되는 함수이며 페이지 진입 전에 이 함수를 실행합니다. 이 함수는 응답값에 따라 페이지의 루트 컴포넌트에 props를 반환할수도 다른 페이지로 리다이렉트시킬 수도 있습니다.
+
+```ts
+export default function Post({ post }: { post: Post }) {
+  // 레더링
+}
+
+export const getServerSideProps: getServerSideProps = async (context) => {
+  const {
+    query: { id = "" },
+  } = context;
+  const post = await fetchPost(id.toString());
+
+  return {
+    props: { post },
+  };
+};
+```
+
+context.query.id를 사용하면 /post/[id]와 같은 경로에 있는 id 값에 접근할 수 있습니다.
+
+### App Routing
+
+```ts
+import { notFound } from 'next/navigation';
+
+export default async function PostPage({ params }: { params: { id: string } }) {
+  const { id } = params;
+
+  // 서버에서 데이터를 가져옴
+  const post = await fetchPost(id);
+
+  if (!post) {
+    // 데이터가 없을 경우 404 처리
+    notFound();
+  }
+
+  return (
+    <div>
+      <h1>{post.title}</h1>
+      <p>{post.content}</p>
+    </div>
+  );
+}
+```
+
+---
+
+[리액트 딥다이브 스터디]: https://github.com/scato3/React-Deep-Dive-Study
