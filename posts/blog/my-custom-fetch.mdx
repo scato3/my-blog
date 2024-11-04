@@ -1,0 +1,189 @@
+---
+title: 효율적인 API 호출을 위한 나만의 Fetch 라이브러리 제작기
+date: 2024-10-16
+description: fetch 라이브러리를 만들자!
+thumbnailUrl: /posts/thumbnail/icon-javascript.png
+---
+
+![](/posts/thumbnail/icon-javascript.png)
+
+[라이브러리 배포 주소]
+
+<h3 className="text-center">
+  저만의 fetch 라이브러리를 만든 이유와 그 과정 그리고 사용법에 대해서
+  공유하고자 합니다
+</h3>
+
+기존에 axios는 몇 가지 단점이 있습니다. 첫째, Next.js의 서버사이드 렌더링(SSR) 환경에서는 axios가 Next.js의 최적화된 캐싱을 제공받지 못합니다. 둘째, axios의 모듈 크기가 상대적으로 크기 때문에 번들 크기를 줄이려는 프로젝트에서는 성능 저하를 초래할 수 있습니다.
+
+이러한 이유로 fetch를 선택했지만, fetch는 보일러플레이트 코드가 많고, 전처리 및 후처리 기능이 기본적으로 제공되지 않는다는 문제가 있습니다.
+
+<h3 className="text-center">라이브러리의 주요 기능</h3>
+
+제 라이브러리는 여러 기능을 통합해 개발자 경험을 개선하려 했는데, 그 주요 기능은 다음과 같습니다
+
+- 토큰 관리 및 자동 갱신
+
+  - 토큰 만료 시 자동으로 갱신하는 기능을 제공합니다. 또한, 여러 요청이 동시에 토큰 갱신을 기다릴 때, 대기열을 만들어 처리합니다. 이를 통해 중복된 갱신 요청을 방지할 수 있습니다.
+
+- 재시도 및 지연 설정
+
+  - 요청이 실패할 경우 자동으로 재시도하는 기능을 구현했습니다. 예를 들어, 네트워크 문제가 발생했을 때, 일정 시간 지연 후 다시 시도하도록 설정할 수 있습니다. retryCount와 retryDelay 옵션으로 이를 쉽게 제어할 수 있습니다.
+
+- 요청 전후 훅 (beforeRequest, afterResponse)
+
+  - 요청을 보내기 전과 응답을 받은 후에 사용자 정의 로직을 실행할 수 있습니다. 예를 들어, 요청 전 헤더를 수정하거나, 응답 후에 로깅 기능을 추가할 수 있습니다.
+
+- Timeout 설정
+
+  - 일정 시간 내에 응답이 없을 경우, 요청을 자동으로 취소하는 timeout 설정을 지원합니다. 이로 인해 장시간 대기하는 문제를 방지할 수 있습니다.
+
+- Next.js에 특화된 옵션
+
+  - Next.js와의 호환성을 강화하기 위해 revalidate와 tags 같은 옵션을 제공합니다. 이를 통해 Next.js의 캐싱 메커니즘을 활용할 수 있습니다.
+
+<h3 className="text-center">구현 과정 및 어려움</h3>
+
+#### 토큰 갱신 처리
+
+토큰 갱신 과정에서의 어려움은 여러 요청이 동시에 토큰 갱신을 기다릴 때 발생하는 경쟁 상태를 관리하는 것이었습니다. 이를 해결하기 위해 Promise 기반의 대기열 시스템을 설계했습니다.
+
+```ts
+if (this.isRefreshingToken) {
+  // 다른 요청들이 대기열에 추가되어 토큰 갱신이 완료될 때까지 기다림
+  return new Promise<void>((resolve, reject) => {
+    this.tokenRefreshQueue.push({ resolve, reject });
+  });
+  this.isRefreshingToken = true;
+
+  try {
+    // 실제 토큰 갱신 작업 수행
+    await this.config.onRefreshToken?.();
+  } catch (error) {
+    // 갱신 실패 시 대기열의 모든 요청에 오류 전파
+    while (this.tokenRefreshQueue.length) {
+      const { reject } = this.tokenRefreshQueue.shift()!;
+      reject?.(error);
+    }
+    throw error;
+  } finally {
+    this.isRefreshingToken = false;
+    // 갱신 완료 후 대기열의 모든 요청을 처리
+    while (this.tokenRefreshQueue.length) {
+      const { resolve } = this.tokenRefreshQueue.shift()!;
+      resolve?.();
+    }
+  }
+}
+```
+
+이 코드를 통해, 한 번에 하나의 토큰 갱신만 수행되며, 나머지 요청들은 대기열에서 대기하다가 갱신이 완료되면 처리됩니다.
+
+#### 재시도 로직 구현
+
+재시도 로직에서는 단순히 요청을 반복하지 않고, 네트워크 상황과 응답 상태를 분석한 후 재시도할지를 결정하도록 설계했습니다.
+
+```ts
+const { retryCount = 3, retryDelay = 1000, onError } = options;
+
+for (let attempt = 0; attempt <= retryCount; attempt++) {
+  try {
+    const response = await fetch(options.url, { method: options.method });
+    if (!response.ok) {
+      const errorData = await response.json();
+      const error = new Error(errorData.message || "Request failed");
+      if (onError) {
+        onError(error);
+      }
+      throw error;
+    }
+
+    // 성공 시 데이터 반환
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    if (attempt >= retryCount) {
+      // 모든 재시도 실패 시 에러 처리
+      if (onError && error instanceof Error) {
+        onError(error);
+      }
+      throw error;
+    }
+    // 재시도 전 지연
+    await new Promise((res) => setTimeout(res, retryDelay));
+  }
+}
+```
+
+<h3 className="text-center">코드 예제 및 사용법</h3>
+
+아래는 hs-fetch를 사용하는 간단한 예제입니다
+
+```ts
+// 클라이언트에서 사용하는 API 인스턴스
+const clientApi = new Api({
+  baseUrl: "https://api.example.com",
+  getToken: () => localStorage.getItem("token"),
+  onRefreshToken: async () => {
+    const newToken = await fetchNewToken();
+    localStorage.setItem("token", newToken);
+  },
+  onRefreshTokenFailed: () => {
+    window.location.href = "/login";
+  },
+});
+```
+
+```ts
+// SSR 환경에서 사용하는 API 인스턴스
+const serverApi = new Api({
+  baseUrl: "https://api.example.com",
+  getToken: () => {
+    // 서버 환경에서는 브라우저 API를 사용할 수 없으므로 쿠키 등에서 토큰을 가져옴
+    // 예: 쿠키에서 토큰을 추출하는 로직
+    return null; // 실제 토큰 추출 로직으로 대체
+  },
+  onRefreshToken: async () => {
+    // 서버 환경에서는 클라이언트와 다른 토큰 갱신 로직을 사용할 수 있음
+  },
+  onRefreshTokenFailed: () => {
+    // 서버사이드에서는 보통 리다이렉트 같은 작업을 할 수 없습니다.
+  },
+});
+```
+
+```ts
+// GET 요청 예제
+api.get({
+  url: "/users",
+  revalidate: 10, // Next.js에서 10초마다 캐시 재검증
+  tags: ["user-data"], // Next.js에서 캐시 태그 지정
+  retryCount: 3, // 최대 3번 재시도
+  retryDelay: 2000, // 각 재시도 사이에 2초 지연
+  timeout: 5000, // 요청 타임아웃: 5초
+  onBeforeRequest: (url, options) => {
+    console.log("Request is about to be sent:", url, options);
+  },
+  onSuccess: (data) => {
+    console.log("User data successfully retrieved:", data);
+  },
+  onError: (error) => {
+    console.error("Error occurred while fetching user data:", error);
+  },
+  afterResponse: (response) => {
+    console.log("Response received:", response);
+  },
+});
+```
+
+<h3 className="text-center">모듈 크기 개선</h3>
+
+![](/posts/axios.png)
+
+![](/posts/hs-fetch.png)
+
+다음과 같이 모듈 크기를 약 98.92% 개선했습니다. ​
+
+---
+
+[라이브러리 배포 주소]: https://www.npmjs.com/package/hs-fetch
