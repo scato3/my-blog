@@ -25,7 +25,7 @@ thumbnailUrl: /posts/thumbnail/icon-react.png
 
 ## 1. 변경사항 감지: 리액트가 디핑(디프) 체크를 수행
 
-리액트는 <strong>Virtual DOM(VDOM)</strong>을 사용하여 효율적으로 UI를 업데이트합니다. 컴포넌트에서 state나 props가 변경되면 리액트는 이전 상태의 VDOM과 새로운 상태의 VDOM을 비교하는 작업, 즉 **디핑(diffing)**을 수행합니다.
+리액트는 <strong>Virtual DOM(VDOM)</strong>을 사용하여 효율적으로 UI를 업데이트합니다. 컴포넌트에서 state나 props가 변경되면 리액트는 이전 상태의 VDOM과 새로운 상태의 VDOM을 비교하는 작업, 즉 디핑(diffing)을 수행합니다.
 이 과정에서 어떤 부분이 변경되었는지 최소한의 연산으로 감지하며, DOM을 직접 조작하지 않고 가상 객체를 사용해 변경사항을 확인하는 것이 리액트의 강점입니다.
 
 ## 2. 작업 분할: 리액트 파이버(Fiber) 구조의 등장
