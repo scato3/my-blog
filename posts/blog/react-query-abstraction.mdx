@@ -1,0 +1,127 @@
+---
+title: React Query - InvalidateQueries 추상화하기
+date: 2025-01-17
+description: React Query의 invalidateQueries를 타입 안전하게 추상화하여 재사용성을 높이는 방법
+thumbnailUrl: /posts/thumbnail/icon-react-query.png
+---
+
+React Query의 invalidateQueries를 타입 안전하게 추상화하여 관리하는 방법에 대해 알아보겠습니다.
+
+<h3 className="text-center">
+  해당 포스팅은 저희 서비스에서 제가 생각한 최적의 판단이었으며 모든 상황에
+  유의미하게 적용되는 것은 아닙니다.
+</h3>
+
+## 배경
+
+데이터를 수정하는 액션이 발생할 때마다 여러 개의 쿼리키를 함께 무효화해야 했습니다.
+이 작업이 여러 곳에서 반복되었고, 매번 동일한 쿼리키들을 함께 무효화해야 했습니다.
+
+이렇게 연관된 쿼리키들을 매번 나열하는 것은 실수의 여지도 있고 반복적인 작업이라 이를 개선할 방법을 고민하게 되었습니다.
+
+## 기존 코드
+
+기존에는 다음과 같이 각각의 쿼리키에 대해 invalidateQueries를 반복적으로 호출해야 했습니다:
+
+```typescript
+const handleSomeAction = () => {
+  queryClient.invalidateQueries({
+    queryKey: ["aaa"],
+    exact: false,
+    refetchType: "all",
+  });
+  queryClient.invalidateQueries({
+    queryKey: ["bbb"],
+    exact: false,
+    refetchType: "all",
+  });
+};
+```
+
+이런 코드가 여러 곳에서 반복되다 보니 다음과 같은 문제가 있었습니다:
+
+- 동일한 옵션(exact: false, refetchType: 'all')을 매번 반복 작성
+- 실수로 특정 쿼리키를 빼먹을 가능성
+
+## 첫 번째 개선
+
+먼저 반복되는 invalidateQueries 호출을 하나의 함수로 묶어보았습니다:
+
+```typescript
+export const invalidateAAAQueries = (queryClient: QueryClient) => {
+  queryClient.invalidateQueries({
+    queryKey: ["aaa"],
+    exact: false,
+    refetchType: "all",
+  });
+  queryClient.invalidateQueries({
+    queryKey: ["bbb"],
+    exact: false,
+    refetchType: "all",
+  });
+};
+```
+
+이렇게 하면 여러 곳에서 반복되는 코드를 하나로 모을 수는 있었지만,
+여전히 각각의 invalidateQueries 호출에서 동일한 옵션이 반복되는 문제가 있었습니다.
+또한 쿼리키에 대한 타입 안전성도 확보되지 않았죠.
+
+## 최종 개선
+
+반복되는 옵션을 추상화하고 타입 안전성을 확보하기 위해 다음과 같이 개선했습니다:
+
+```typescript
+import { QueryClient } from "@tanstack/react-query";
+
+type QueryKeys = ["aaa"] | ["bbb"];
+
+const InvalidateQueries = (queryClient: QueryClient, queryKey: QueryKeys) => {
+  queryClient.invalidateQueries({
+    queryKey,
+    exact: false,
+    refetchType: "all",
+  });
+};
+
+export const invalidateAAAQueries = (queryClient: QueryClient) => {
+  InvalidateQueries(queryClient, ["aaa"]);
+  InvalidateQueries(queryClient, ["bbb"]);
+};
+```
+
+이렇게 개선함으로써 다음과 같은 이점을 얻을 수 있었습니다:
+
+### 1. 타입 안전성
+
+- `QueryKeys` 타입을 통해 사용 가능한 쿼리키를 명시적으로 정의
+- 잘못된 쿼리키 사용 시 타입 에러로 즉시 감지 가능
+
+### 2. 옵션 중앙화
+
+- invalidateQueries 옵션을 `InvalidateQueries` 함수에서 한 번만 정의
+- 옵션 변경이 필요할 경우 한 곳만 수정하면 됨
+
+### 3. 선언적 사용
+
+```typescript
+// 사용하는 쪽에서는 매우 깔끔하게 호출 가능
+const handleUpdate = () => {
+  invalidateAAAQueries(queryClient);
+};
+```
+
+### 4. 확장성
+
+- 새로운 쿼리키가 필요한 경우 `QueryKeys` 타입만 확장하면 됨
+- 다른 도메인의 쿼리들도 같은 패턴으로 쉽게 구현 가능
+
+```typescript
+type UserQueryKeys = ["userList"] | ["userDetails"];
+
+export const invalidateUserQueries = (queryClient: QueryClient) => {
+  InvalidateQueries(queryClient, ["userList"]);
+  InvalidateQueries(queryClient, ["userDetails"]);
+};
+```
+
+이러한 추상화를 통해 코드의 안정성과 유지보수성을 크게 향상시킬 수 있었습니다.
