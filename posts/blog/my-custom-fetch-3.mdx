@@ -1,0 +1,137 @@
+---
+title: Cypress로 fetch 라이브러리 E2E 테스트하기
+date: 2024-10-30
+description: Cypress를 활용한 fetch 라이브러리의 E2E 테스트 전략 개선기
+thumbnailUrl: /posts/thumbnail/icon-cypress.png
+---
+
+![](/posts/thumbnail/icon-cypress.png)
+
+[라이브러리 배포 주소]
+
+> 이 글에서 소개하는 테스트 전략은 제가 선택한 하나의 접근 방식일 뿐, 모든 상황에서 최선의 방법이 아닐 수 있습니다.
+> 프로젝트의 특성과 요구사항에 따라 다른 테스트 전략이 더 적합할 수 있습니다.
+
+<h3 className="text-center">
+  fetch 라이브러리의 안정성을 확보하기 위해 제가 선택한 E2E 테스트 전략의 개선
+  과정을 공유하고자 합니다.
+</h3>
+
+## 기존 테스트의 문제점
+
+처음에는 Supabase를 활용하여 실제 API 호출을 통한 E2E 테스트를 구현했습니다:
+
+```typescript
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+describe("hs-fetch API E2E 테스트 (Supabase 사용)", () => {
+  // ... Supabase 관련 설정 ...
+
+  it("GET 요청 테스트", () => {
+    api.get({
+      url: `${API_ENDPOINT}/test`,
+      query: { select: "*" },
+      // ... 실제 API 호출 ...
+    });
+  });
+});
+```
+
+하지만 이 접근 방식에는 몇 가지 문제가 있었습니다:
+
+Supabase와 같은 외부 서비스에 의존하다 보니 서비스가 비활성화되면 테스트가 실패하는 문제가 있었고,
+테스트용 데이터 관리와 정리가 복잡했으며 환경 변수와 인증 토큰 관리도 번거로웠습니다.
+
+## 개선된 테스트 전략
+
+Cypress는 브라우저 환경을 완전히 제어할 수 있어, 네트워크 요청을 가로채고 모의 응답을 제공할 수 있습니다.
+이러한 request interception 기능을 활용하여 다음과 같이 테스트 전략을 개선했습니다:
+
+```typescript
+// Cypress가 브라우저의 네트워크 요청을 가로채서
+// 실제 API 호출 없이도 원하는 응답을 시뮬레이션할 수 있습니다
+cy.intercept("GET", `${API_ENDPOINT}/test*`, {
+  statusCode: 200,
+  body: [{ id: 1, key: "value" }],
+}).as("getRequest");
+```
+
+이는 Cypress가 브라우저 내부에서 직접 실행되어 실제 네트워크 계층을 제어할 수 있기 때문에 가능합니다.
+Supabase와 같은 외부 서비스를 사용할 때보다 더 안정적이고 예측 가능한 테스트 환경을 제공합니다.
+
+## 주요 테스트 케이스
+
+1. **기본 HTTP 메소드 테스트**
+
+   - GET, POST, PUT, PATCH, DELETE 요청 검증
+   - 요청 헤더와 바디 데이터 확인
+
+2. **토큰 갱신 플로우**
+
+   - 401 응답 시 토큰 갱신 동작 확인
+   - 갱신된 토큰으로 재요청 검증
+
+3. **에러 처리**
+   - 다양한 HTTP 상태 코드 시뮬레이션
+   - 타임아웃과 네트워크 에러 처리 확인
+
+```typescript
+describe("hsc-fetch API E2E Test", () => {
+  beforeEach(() => {
+    // HTTP 메소드별 모의 응답 설정
+    cy.intercept("GET", `${API_ENDPOINT}/test*`, {
+      statusCode: 200,
+      body: [{ id: 1, key: "value" }],
+    }).as("getRequest");
+    // ... 다른 HTTP 메소드 설정 ...
+  });
+
+  it("GET Request Test", () => {
+    api.get({
+      url: `${API_ENDPOINT}/test`,
+      query: { select: "*" },
+      onSuccess: (data) => {
+        expect(data).to.be.an("array");
+      },
+    });
+
+    cy.wait("@getRequest").then((interception) => {
+      expect(interception.request.headers).to.have.property(
+        "authorization",
+        "Bearer test-token"
+      );
+    });
+  });
+});
+```
+
+## 개선된 점
+
+1. **안정적인 테스트**
+
+   - 외부 서비스 의존성 제거
+
+2. **더 나은 테스트 커버리지**
+
+   - 다양한 시나리오 테스트 용이
+   - 에러 케이스와 타임아웃 상황 시뮬레이션 가능
+
+3. **빠른 테스트 실행**
+
+   - 실제 API 호출 없이 즉각적인 응답
+
+4. **쉬운 디버깅**
+   - 요청/응답 데이터 명확한 확인 가능
+   - 테스트 실패 원인 파악이 용이
+
+## 앞으로의 계획
+
+이번 테스트 전략 개선을 통해 얻은 경험을 바탕으로 다른 프로젝트에도 다음과 같은 방식을 도입할 예정입니다:
+
+- CI/CD 파이프라인에 E2E 테스트를 통합하여 배포 전 자동 검증
+- 새로운 기능 추가 시 관련 테스트 케이스 먼저 작성 (TDD 방식 도입)
+- 테스트 커버리지 리포트 생성 및 모니터링
+
+이를 통해 프로젝트의 안정성을 지속적으로 확보하고, Cypress를 활용한 테스트 자동화의 이점을 최대한 활용하고자 합니다.
+
+[라이브러리 배포 주소]: https://www.npmjs.com/package/hsc-fetch
