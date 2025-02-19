@@ -1,0 +1,211 @@
+---
+title: Next.js에서 Error Boundary를 적용해 오류 처리하기
+date: 2025-02-19
+description: React의 Error Boundary를 활용한 선언적이고 중앙화된 에러 처리 방법 소개
+thumbnailUrl: /posts/thumbnail/icon-javascript.png
+---
+
+![](/posts/thumbnail/icon-javascript.png)
+
+> 소개하는 에러 처리 방식은 제가 선택한 하나의 접근 방식일 뿐, 모든 상황에서 최선의 방법이 아닐 수 있습니다.
+
+<h3 className="text-center">
+  React의 Error Boundary를 활용해 선언적이고 중앙화된 에러 처리 시스템을 구축한
+  경험을 공유합니다.
+</h3>
+
+## Error Boundary란?
+
+Error Boundary는 React 16에서 도입된 기능으로, 하위 컴포넌트 트리에서 발생하는 JavaScript 에러를 캐치하고 에러 UI를 표시할 수 있는 React 컴포넌트입니다. 클래스 컴포넌트에서만 구현 가능하며, `getDerivedStateFromError`나 `componentDidCatch` 중 하나 이상을 구현해야 합니다.
+
+## 기존 에러 처리의 문제점
+
+기존에는 각 컴포넌트마다 try-catch를 사용해 에러를 개별적으로 처리했습니다:
+
+```typescript
+const Component = () => {
+  try {
+    // 비즈니스 로직
+  } catch (error) {
+    alert("에러가 발생했습니다");
+    setError(error);
+  }
+};
+```
+
+이 방식의 문제점:
+
+1. 에러 처리 로직이 비즈니스 로직과 섞여 코드가 복잡해짐
+2. 동일한 에러 처리 로직을 여러 컴포넌트에서 반복 작성
+3. 일관된 에러 UI를 제공하기 어려움
+
+## Error Boundary 구현
+
+### 1. 기본 구조
+
+```typescript
+"use client";
+
+import { Component, ReactNode } from "react";
+import { useModal } from "@/app/providers/modal-provider";
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+}
+
+class ErrorBoundaryClass extends Component<
+  Props & { showModal: (title: string, message: string) => void },
+  State
+> {
+  constructor(
+    props: Props & { showModal: (title: string, message: string) => void }
+  ) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error & { title?: string }) {
+    this.props.showModal(
+      error.title || "Error",
+      error.message || "An error occurred"
+    );
+    this.setState({ hasError: false });
+  }
+
+  render() {
+    return this.props.children;
+  }
+}
+
+export function ErrorBoundary({ children }: Props) {
+  const { showModal } = useModal();
+
+  return (
+    <ErrorBoundaryClass showModal={showModal}>{children}</ErrorBoundaryClass>
+  );
+}
+```
+
+### 2. 에러 객체 구조화
+
+```typescript
+interface CustomError {
+  title: string; // 에러 제목
+  message: string; // 에러 메시지
+}
+```
+
+### 3. 앱 전체 래핑
+
+```typescript
+// app/providers.tsx
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <ModalProvider>
+      <ErrorBoundary>
+        <QueryProvider>{children}</QueryProvider>
+      </ErrorBoundary>
+    </ModalProvider>
+  );
+}
+```
+
+## React Query와의 통합
+
+React Query의 에러를 ErrorBoundary로 전파하기 위한 설정:
+
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    mutations: {
+      throwOnError: true, // mutation 에러를 ErrorBoundary로 전파
+    },
+    queries: {
+      throwOnError: true, // query 에러도 ErrorBoundary로 전파
+    },
+  },
+});
+```
+
+## 실제 사용 예시
+
+```typescript
+// API 함수
+const getPosts = () => api.get<Post[]>("/api/posts");
+
+// 컴포넌트
+const PostList = () => {
+  // throwOnError 설정으로 인해 에러가 발생하면
+  // 자동으로 ErrorBoundary로 전파됨
+  const { data } = useQuery({
+    queryKey: ["posts"],
+    queryFn: getPosts,
+  });
+
+  return (
+    <ul>
+      {data?.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+};
+```
+
+QueryClient의 `throwOnError` 설정으로 인해:
+
+1. API 호출 실패 시 에러가 React Query로 전달됨
+2. React Query는 이 에러를 ErrorBoundary로 전파
+3. ErrorBoundary가 에러를 캐치하여 모달로 표시
+
+## 제한사항 및 주의사항
+
+ErrorBoundary가 캐치하지 못하는 상황들:
+
+1. 이벤트 핸들러 내부의 에러
+
+   - onClick, onChange 등의 이벤트 핸들러
+   - try-catch로 직접 처리 필요
+
+2. 비동기 코드의 에러
+
+   - setTimeout, Promise 등의 비동기 작업
+   - async/await 구문 내부
+   - React Query의 throwOnError 옵션으로 해결 가능
+   - useQuery, useMutation의 모든 에러가 ErrorBoundary로 전파됨
+
+3. 서버 사이드 렌더링 중의 에러
+
+   - Next.js의 error.tsx나 loading.tsx 활용 필요
+   - app 디렉토리의 error boundary 활용
+
+4. ErrorBoundary 자체의 에러
+   - 상위 ErrorBoundary로 처리 위임
+   - 가장 상위 레벨의 에러 처리 로직은 신중하게 작성
+
+## 결론
+
+Error Boundary 도입으로 얻은 이점:
+
+1. 중앙화된 에러 처리
+
+   - 일관된 에러 UI 제공
+   - 에러 로깅 및 모니터링 용이
+
+2. 비즈니스 로직과 에러 처리 분리
+   - 컴포넌트는 핵심 기능에만 집중
+   - 유지보수성 향상
+
+이를 통해 더 선언적이고 관리하기 쉬운 에러 처리 시스템을 구축할 수 있었습니다.
+
+---
+
+[Error Boundary 사용 예시 코드는 여기로](https://github.com/scato3/error-boundary)
