@@ -166,26 +166,52 @@ export function Providers({ children }: { children: React.ReactNode }) {
 ## 실제 사용 예시
 
 ```typescript
-const PostList = () => {
-  const { data } = useQuery({
-    queryKey: ["posts"],
-    queryFn: () => api.get<Post[]>("/api/posts"),
+const PostForm = () => {
+  const mutation = useMutation({
+    mutationFn: async (newPost: Post) => {
+      try {
+        const response = await fetch("/api/posts", {
+          method: "POST",
+          body: JSON.stringify(newPost),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message);
+        }
+
+        return response.json();
+      } catch (error) {
+        throw new Error(error.message);
+      }
+    },
   });
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutation.mutate({
+      title: "새 게시글",
+      content: "내용...",
+    });
+  };
+
   return (
-    <ul>
-      {data?.map((post) => (
-        <li key={post.id}>{post.title}</li>
-      ))}
-    </ul>
+    <form onSubmit={handleSubmit}>
+      <button type="submit">저장</button>
+    </form>
   );
 };
 ```
 
-API 호출이 실패하면:
+폼 제출 후 API 호출이 실패하면:
 
-1. throwOnError 설정으로 인해 에러가 ErrorBoundary로 전파
-2. ErrorBoundary의 componentDidCatch에서 에러를 캐치하여 모달로 표시
+1. mutationFn 내에서 명시적으로 throw된 에러가 React Query에 의해 감지됨
+2. throwOnError: true 설정으로 인해 에러가 Error Boundary로 전파
+3. Error Boundary의 componentDidCatch에서 에러를 캐치하여 모달로 표시
+4. 사용자에게 에러 상황을 알려줌
 
 ## 제한사항 및 주의사항
 
