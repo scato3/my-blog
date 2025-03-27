@@ -1,0 +1,491 @@
+---
+title: 나만의 React 라이브러리 만들기: Virtual DOM과 Hooks 구현하기
+date: 2025-03-27
+description: React의 핵심 기능들을 직접 구현하면서 내부 동작 원리를 이해해보자
+thumbnailUrl: /posts/thumbnail/icon-react.png
+---
+
+![](/posts/thumbnail/icon-react.png)
+
+# 나만의 React 라이브러리 만들기: Virtual DOM부터 Hooks까지
+
+안녕하세요! 오늘은 제가 직접 만든 커스텀 React 라이브러리에 대해 이야기해보려고 합니다. React의 핵심 기능들을 직접 구현해보면서 React가 어떻게 작동하는지 더 깊이 이해할 수 있었던 경험을 공유하고자 합니다.
+
+## 왜 커스텀 React를 만들게 되었나?
+
+React를 사용하면서 항상 궁금했던 것이 있었습니다:
+
+- Virtual DOM은 실제로 어떻게 동작할까?
+- useState와 useEffect 같은 Hooks는 어떻게 구현되어 있을까?
+- 컴포넌트의 리렌더링은 어떤 방식으로 처리될까?
+
+이러한 궁금증을 해결하기 위해, React의 핵심 기능들을 직접 구현해보기로 했습니다.
+
+## MVP(Minimum Viable Product) 구현 과정
+
+### 1. Virtual DOM 구현
+
+먼저 가장 기본이 되는 Virtual DOM을 구현했습니다. Virtual DOM은 실제 DOM의 가벼운 복사본으로, 다음과 같은 구조로 설계했습니다:
+
+```javascript
+{
+  type: 'div',
+  props: { className: 'container' },
+  children: []
+}
+```
+
+이 Virtual DOM 구조를 실제 DOM으로 변환하는 과정은 다음과 같습니다:
+
+```javascript
+export function render(vNode, container, parentPath = "") {
+  // 1. vNode가 문자열이나 숫자인 경우 (텍스트 노드)
+  if (typeof vNode === "string" || typeof vNode === "number") {
+    const textNode = document.createTextNode(vNode);
+    container.appendChild(textNode);
+    return textNode; // 생성된 텍스트 노드를 반환
+  }
+
+  // 2. 함수형 컴포넌트 처리
+  if (typeof vNode.type === "function") {
+    const prevComponent = currentComponent;
+    currentComponent = vNode.type;
+    const childNode = vNode.type(vNode.props);
+    currentComponent = prevComponent;
+    return render(childNode, container);
+  }
+
+  // 3. HTML 요소 생성
+  const element = document.createElement(vNode.type);
+
+  // 4. 속성 설정
+  if (vNode.props) {
+    Object.entries(vNode.props).forEach(([name, value]) => {
+      // 이벤트 핸들러 처리
+      if (name.startsWith("on") && typeof value === "function") {
+        const eventName = name.slice(2).toLowerCase();
+        element.addEventListener(eventName, value);
+      }
+      // className 처리
+      else if (name === "className") {
+        element.setAttribute("class", value);
+      }
+      // style 객체 처리
+      else if (name === "style" && typeof value === "object") {
+        Object.entries(value).forEach(([styleName, styleValue]) => {
+          element.style[styleName] = styleValue;
+        });
+      }
+      // 일반 속성 처리
+      else if (name !== "children") {
+        element.setAttribute(name, value);
+      }
+    });
+  }
+
+  // 5. 자식 요소 재귀적 렌더링
+  if (vNode.children) {
+    vNode.children.forEach((child) => render(child, element));
+  }
+
+  container.appendChild(element);
+  return element;
+}
+```
+
+## Virtual DOM과 실제 DOM 변환 과정 자세히 살펴보기
+
+### Virtual DOM이란?
+
+Virtual DOM은 실제 DOM을 JavaScript 객체로 표현한 것입니다. 예를 들어, 다음과 같은 HTML이 있다고 가정해봅시다:
+
+```html
+<div class="container">
+  <h1>안녕하세요</h1>
+  <button onclick="alert('클릭')">클릭하세요</button>
+</div>
+```
+
+이 HTML은 Virtual DOM에서 다음과 같은 JavaScript 객체로 표현됩니다:
+
+```javascript
+const vNode = {
+  type: "div",
+  props: { className: "container" },
+  children: [
+    {
+      type: "h1",
+      props: {},
+      children: ["안녕하세요"],
+    },
+    {
+      type: "button",
+      props: { onClick: () => alert("클릭") },
+      children: ["클릭하세요"],
+    },
+  ],
+};
+```
+
+### Virtual DOM이 실제 DOM으로 변환되는 과정
+
+1. **createElement 함수로 Virtual DOM 생성**
+
+```javascript
+// JSX로 작성된 코드
+<div className="container">
+  <h1>안녕하세요</h1>
+  <button onClick={() => alert("클릭")}>클릭하세요</button>
+</div>;
+
+// 위 JSX는 다음과 같이 createElement 호출로 변환됩니다
+createElement("div", { className: "container" }, [
+  createElement("h1", null, "안녕하세요"),
+  createElement("button", { onClick: () => alert("클릭") }, "클릭하세요"),
+]);
+```
+
+2. **render 함수에서 Virtual DOM을 실제 DOM으로 변환**
+
+```javascript
+function render(vNode, container) {
+  // 1. vNode가 문자열이나 숫자인 경우 (텍스트 노드)
+  if (typeof vNode === "string" || typeof vNode === "number") {
+    const textNode = document.createTextNode(vNode);
+    container.appendChild(textNode);
+    return textNode; // 생성된 텍스트 노드를 반환
+  }
+
+  // 2. HTML 요소 생성
+  // 예: vNode.type이 'div'면 → <div></div> 생성
+  const element = document.createElement(vNode.type);
+
+  // 3. 속성 설정
+  // 예: className: 'container' → <div class="container"></div>
+  if (vNode.props) {
+    Object.entries(vNode.props).forEach(([name, value]) => {
+      if (name === "className") {
+        element.setAttribute("class", value);
+      }
+    });
+  }
+
+  // 4. 자식 요소들을 재귀적으로 처리
+  if (vNode.children) {
+    vNode.children.forEach((child) => {
+      render(child, element);
+    });
+  }
+
+  // 5. 생성된 요소를 부모 컨테이너에 추가
+  container.appendChild(element);
+}
+```
+
+### 실제 동작 예시
+
+다음은 전체 변환 과정을 보여주는 예시입니다:
+
+```javascript
+// 1. JSX 코드
+function App() {
+  return (
+    <div className="container">
+      <h1>제목입니다</h1>
+      <p>내용입니다</p>
+    </div>
+  );
+}
+
+// 2. JSX가 createElement 호출로 변환
+function App() {
+  return createElement('div', { className: 'container' }, [
+    createElement('h1', null, '제목입니다'),
+    createElement('p', null, '내용입니다')
+  ]);
+}
+
+// 3. createElement가 반환하는 Virtual DOM 객체
+{
+  type: 'div',
+  props: { className: 'container' },
+  children: [
+    {
+      type: 'h1',
+      props: null,
+      children: ['제목입니다']
+    },
+    {
+      type: 'p',
+      props: null,
+      children: ['내용입니다']
+    }
+  ]
+}
+
+// 4. render 함수가 이 Virtual DOM을 실제 DOM으로 변환
+// 최종 결과:
+<div class="container">
+  <h1>제목입니다</h1>
+  <p>내용입니다</p>
+</div>
+```
+
+### document.createElement(vNode.type)의 의미
+
+- `vNode.type`은 우리가 만들고 싶은 HTML 요소의 태그 이름입니다.
+- 예를 들어 `vNode.type`이 'div'면 `<div></div>`, 'p'면 `<p>` 요소를 생성합니다.
+- `document.createElement()`는 브라우저 내장 API로, 실제 DOM 요소를 생성합니다.
+
+예시:
+
+```javascript
+// Virtual DOM 노드
+const vNode = {
+  type: "div",
+  props: { className: "container" },
+  children: ["Hello"],
+};
+
+// DOM 변환 과정
+const element = document.createElement(vNode.type); // <div></div> 생성
+element.setAttribute("class", vNode.props.className); // <div class="container"></div>
+element.appendChild(document.createTextNode(vNode.children[0])); // <div class="container">Hello</div>
+```
+
+이렇게 Virtual DOM은 실제 DOM의 구조를 JavaScript 객체로 표현하고, render 함수는 이 객체를 실제 브라우저가 이해할 수 있는 DOM 요소로 변환하는 역할을 합니다.
+
+### 2. createElement 함수
+
+JSX를 대체하기 위한 createElement 함수를 구현했습니다:
+
+```javascript
+export function createElement(type, props, ...children) {
+  const flatChildren = children
+    .flat()
+    .filter((child) => child !== null && child !== undefined);
+
+  return {
+    type,
+    props: props || {},
+    children: flatChildren,
+  };
+}
+```
+
+이 함수는 다음과 같이 동작합니다:
+
+1. JSX가 변환될 때 `createElement('div', { className: 'container' }, child1, child2)`와 같은 형태로 호출됩니다.
+2. 중첩된 배열을 평탄화하고 null/undefined 값을 제거합니다.
+3. Virtual DOM 노드 객체를 생성하여 반환합니다.
+
+### 3. 상태 관리 시스템 (useState)
+
+React의 가장 중요한 기능 중 하나인 useState를 구현했습니다. 상태 관리를 위해 다음과 같은 전역 변수들을 사용합니다:
+
+```javascript
+let currentComponent = null; // 현재 실행 중인 컴포넌트
+let states = {}; // 컴포넌트별 상태 저장소
+let stateIndex = 0; // 훅 호출 순서 추적
+```
+
+useState의 전체 구현은 다음과 같습니다:
+
+```javascript
+export function useState(initialValue) {
+  const componentName = currentComponent.name;
+  const index = stateIndex++;
+
+  // 컴포넌트의 상태 객체가 없으면 초기화
+  if (!states[componentName]) {
+    states[componentName] = {};
+  }
+
+  // 상태 인덱스 키 생성
+  const stateKey = `${index}`;
+
+  // 상태가 초기화되지 않았으면 초기값 설정
+  if (states[componentName][stateKey] === undefined) {
+    states[componentName][stateKey] = initialValue;
+  }
+
+  const state = states[componentName][stateKey];
+
+  const setState = (newValue) => {
+    // 함수형 업데이트 지원
+    const nextValue =
+      typeof newValue === "function"
+        ? newValue(states[componentName][stateKey])
+        : newValue;
+
+    // 상태 비교 (값이 같으면 업데이트 하지 않음)
+    try {
+      const currentStateStr = JSON.stringify(states[componentName][stateKey]);
+      const nextStateStr = JSON.stringify(nextValue);
+
+      if (currentStateStr === nextStateStr) return;
+    } catch (e) {
+      // JSON 변환 오류 시에도 계속 진행
+    }
+
+    // 상태 업데이트
+    states[componentName][stateKey] = nextValue;
+
+    // 큐에 업데이트 추가
+    queueUpdate();
+  };
+
+  return [state, setState];
+}
+```
+
+주요 특징:
+
+1. **컴포넌트별 상태 관리**: 각 컴포넌트의 상태를 `states` 객체에 독립적으로 저장
+2. **훅 순서 보장**: `stateIndex`를 통해 훅 호출 순서 추적
+3. **함수형 업데이트**: `setState`에서 함수를 전달받아 이전 상태 기반 업데이트 지원
+4. **불필요한 리렌더링 방지**: 상태 값이 실제로 변경된 경우에만 업데이트 수행
+5. **비동기 업데이트 큐**: `queueUpdate()`를 통한 효율적인 리렌더링 처리
+
+### 4. 사이드 이펙트 처리 (useEffect)
+
+useEffect 구현을 위한 전역 변수들:
+
+```javascript
+let effects = {}; // 이펙트 저장소
+let effectIndex = 0; // 이펙트 훅 순서 추적
+let effectCleanups = {}; // 클린업 함수 저장소
+```
+
+useEffect의 전체 구현:
+
+```javascript
+export function useEffect(callback, dependencies) {
+  const componentName = currentComponent.name;
+  const index = effectIndex++;
+
+  // 컴포넌트의 이펙트 객체가 없으면 초기화
+  if (!effects[componentName]) {
+    effects[componentName] = {};
+  }
+
+  const effectKey = `${index}`;
+  const prevDeps = effects[componentName][effectKey]?.dependencies;
+
+  // 의존성 배열 변경 감지
+  const depsChanged =
+    !prevDeps ||
+    !dependencies ||
+    dependencies.length !== prevDeps.length ||
+    dependencies.some((dep, i) => dep !== prevDeps[i]);
+
+  // 이펙트 정보 저장
+  effects[componentName][effectKey] = {
+    callback,
+    dependencies,
+    cleanup: effects[componentName][effectKey]?.cleanup,
+  };
+
+  if (depsChanged) {
+    // 렌더링 완료 후 이펙트를 실행하기 위해 setTimeout 사용
+    setTimeout(() => {
+      // 이전 클린업 함수가 있으면 실행
+      if (effects[componentName][effectKey]?.cleanup) {
+        try {
+          effects[componentName][effectKey].cleanup();
+        } catch (e) {
+          console.error("이펙트 클린업 실행 오류:", e);
+        }
+      }
+
+      // 새 이펙트 실행 및 클린업 함수 저장
+      try {
+        const cleanup = callback();
+        effects[componentName][effectKey].cleanup = cleanup;
+      } catch (e) {
+        console.error("이펙트 실행 오류:", e);
+      }
+    }, 0);
+  }
+}
+```
+
+주요 특징:
+
+1. **의존성 배열 비교**: 이전 의존성과 현재 의존성을 비교하여 이펙트 실행 여부 결정
+2. **클린업 함수 관리**: 이전 이펙트의 클린업 함수를 저장하고 적절한 시점에 실행
+3. **비동기 실행**: `setTimeout`을 사용하여 렌더링 완료 후 이펙트 실행
+4. **에러 처리**: 이펙트와 클린업 함수 실행 시 발생할 수 있는 오류 처리
+5. **컴포넌트별 이펙트 관리**: 각 컴포넌트의 이펙트를 독립적으로 관리
+
+이러한 구현을 통해 React의 핵심 기능인 상태 관리와 사이드 이펙트 처리를 구현했습니다. 실제 React와 완전히 동일하지는 않지만, 기본적인 동작 원리를 이해하고 구현해볼 수 있었습니다.
+
+## 실제 동작 예시
+
+다음은 이 커스텀 React로 만든 간단한 카운터 컴포넌트입니다:
+
+```javascript
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    document.title = `카운트: ${count}`;
+    return () => {
+      document.title = "React App";
+    };
+  }, [count]);
+
+  return createElement(
+    "div",
+    null,
+    createElement("h1", null, `현재 카운트: ${count}`),
+    createElement(
+      "button",
+      {
+        onClick: () => setCount(count + 1),
+      },
+      "증가"
+    )
+  );
+}
+```
+
+이 컴포넌트가 동작하는 과정은 다음과 같습니다:
+
+1. Counter 컴포넌트가 호출되면 useState를 통해 상태를 초기화합니다.
+2. useEffect를 통해 title 업데이트 효과를 등록합니다.
+3. createElement를 통해 Virtual DOM 트리를 생성합니다.
+4. render 함수가 Virtual DOM을 실제 DOM으로 변환합니다.
+5. 버튼 클릭 시 setCount가 호출되어 상태가 업데이트되고 리렌더링이 트리거됩니다.
+
+## 주요 기능들
+
+1. **컴포넌트 렌더링**: Virtual DOM을 실제 DOM으로 변환하는 render 함수
+2. **상태 관리**: useState를 통한 컴포넌트 상태 관리
+3. **사이드 이펙트**: useEffect를 통한 생명주기 관리
+4. **이벤트 처리**: 이벤트 핸들러 캐싱 및 최적화
+5. **리렌더링 최적화**: 불필요한 리렌더링 방지
+
+## 배운 점들
+
+이 프로젝트를 통해 다음과 같은 인사이트를 얻을 수 있었습니다:
+
+1. React의 내부 동작 원리에 대한 깊은 이해
+2. 상태 관리의 복잡성과 최적화의 중요성
+3. 프레임워크 설계 시 고려해야 할 다양한 엣지 케이스들
+4. 성능 최적화의 중요성과 방법
+
+## 한계점과 개선 방향
+
+현재 구현된 커스텀 React의 한계점들:
+
+1. 실제 React처럼 효율적인 비교(Reconciliation) 알고리즘 부재
+2. 메모이제이션(useMemo, useCallback) 미구현
+3. Context API 미구현
+4. 에러 바운더리 미구현
+
+## 마치며
+
+이 프로젝트를 통해 React의 내부 동작 방식을 더 깊이 이해할 수 있었고, 프레임워크 설계의 복잡성과 아름다움을 동시에 경험할 수 있었습니다. 다음에는 Reconciliation 알고리즘 구현에 도전해보고 싶습니다.
+
+다음 포스트에서는 각 기능들의 최적화 전략과 Reconciliation 알고리즘 구현에 대해 더 자세히 다루도록 하겠습니다. 감사합니다!
