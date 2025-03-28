@@ -1,5 +1,5 @@
 ---
-title: Next.js에서 Error Boundary를 적용해 오류 처리하기
+title: Error Boundary를 적용해 오류 처리하기
 date: 2025-02-19
 description: React의 Error Boundary와 React Query를 활용한 효과적인 에러 처리 방법
 thumbnailUrl: /posts/thumbnail/icon-javascript.png
@@ -33,7 +33,7 @@ const QueryProvider = ({ children }: { children: ReactNode }) => {
       defaultOptions: {
         mutations: {
           onError: (error: Error & { title?: string }) => {
-            showModal(error.title || "Error", error.message);
+            showModal(error.message);
           },
         },
       },
@@ -105,8 +105,8 @@ class ErrorBoundaryClass extends Component<
 > {
   componentDidCatch(error: Error & { title?: string }) {
     this.props.showModal(
-      error.title || "Error",
-      error.message || "An error occurred"
+      error.title,
+      error.message,
     );
   }
 
@@ -135,8 +135,8 @@ class ErrorBoundaryClass extends Component<Props> {
 
   componentDidCatch(error: Error & { title?: string }) {
     this.props.showModal(
-      error.title || "Error",
-      error.message || "An error occurred"
+      error.title,
+      error.message,
     );
   }
 
@@ -219,8 +219,11 @@ ErrorBoundary가 캐치하지 못하는 상황들:
 
 1. 이벤트 핸들러 내부의 에러
 
-   - onClick, onChange 등의 이벤트 핸들러
-   - try-catch로 직접 처리 필요
+   - onClick, onChange 등의 이벤트 핸들러에서 발생하는 에러는 Error Boundary가 직접 캐치할 수 없음
+   - 해결 방법:
+     1. try-catch로 직접 처리 (Error Boundary 사용하지 않음)
+     2. try-catch로 잡은 후 state를 통해 다음 렌더링에서 throw하여 Error Boundary로 전파
+   - 단순히 이벤트 핸들러에서 throw하는 것만으로는 Error Boundary가 캐치할 수 없음
 
 2. 비동기 코드의 에러
 
