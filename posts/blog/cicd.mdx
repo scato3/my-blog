@@ -53,7 +53,7 @@ module.exports = {
 
 빌드 시에는 다음과 같이 standalone 디렉토리가 생성됩니다.
 
-```
+```js
 dist/**SERVICE_PATH**/.next/standalone/
 ```
 
@@ -261,7 +261,7 @@ COPY --link --from=deps /app/node_modules ./node_modules
 
 ## 8. 결론 및 정리 (실제 파이프라인 기준)
 
-- **ECR 이미지 push**는 docker buildx build --push로 명확하게 수행
+- **ECR 이미지 push**는 docker buildx build --push로 수행
 - **node_modules**는 GitLab CI cache가 있으면 COPY --link로 빠르게 복사, 없으면 새로 설치
 - **.next/cache**는 S3에서만 복원/저장, **.next/static**은 빌드 후 S3에 업로드(복원은 안 함)
 - **실제 파이프라인 흐름**: 캐시 복원 → Docker 빌드/이미지 push → 컨테이너에서 static/cache 추출 → S3 업로드 → 배포
