@@ -194,7 +194,6 @@ RUN --mount=type=cache,target=/root/.npm,id=**CACHE_VERSION**-**SERVICE**-**BRAN
 FROM node:22.14.0-alpine AS builder
 WORKDIR /app
 COPY --link --from=deps /app/node_modules ./node_modules
-COPY --link dist/**SERVICE_PATH**/.next/cache/ ./dist/**SERVICE_PATH**/.next/cache/
 # ...생략
 RUN ./build.sh **BRANCH_NAME** **SERVICE**
 
