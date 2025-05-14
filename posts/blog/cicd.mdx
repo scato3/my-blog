@@ -1,0 +1,225 @@
+---
+title: Gitlab CI 환경에서의 Next.js Standalone 배포 및 캐시 최적화
+date: 2025-05-14
+description: standalone과 캐시, S3 static 서빙, ECR 컨테이너 배포까지
+thumbnailUrl: /posts/thumbnail/nextjs.png
+---
+
+![](/posts/thumbnail/nextjs.png)
+
+회사에서 Next.js 프로젝트를 운영하면서, 번들 크기가 너무 크고 모노레포 환경에서 배포 시간이 지나치게 오래 걸리는 문제가 있었습니다.
+이로 인해 빌드 및 배포 효율을 극대화할 수 있는 구조가 필요하다고 느꼈고, 다양한 캐시 전략과 배포 방식을 적용하게 되었습니다.  
+AWS Elastic Beanstalk으로 배포하고, 정적 파일은 S3에 업로드하여 서빙하는 구조를 사용했습니다.  
+이 글에서는 standalone 빌드, next/cache, S3 static 서빙, 증분 빌드, 그리고 GitLab CI에서의 캐시 전략까지 실제 적용 사례를 바탕으로 상세히 정리합니다.
+
+## 전체 배포 구조
+
+- **ECR**: Next.js standalone 이미지를 빌드하여 **ECR_REPOSITORY**에 업로드합니다.
+- **Elastic Beanstalk**: ECR 이미지를 pull하여 서비스 운영이 가능합니다.
+- **S3**: 정적 파일(**.next/static**)과 빌드 캐시(**.next/cache**)를 **STATIC_S3_BUCKET**에 업로드/다운로드합니다.
+- **GitLab CI**: **node_modules** 캐시를 적극적으로 활용하여 빌드 속도가 최적화됩니다.
+
+---
+
+## 1. Next.js Standalone 빌드와 서빙
+
+Next.js 13 이상에서는 **output: 'standalone'** 옵션을 통해 Node.js 런타임에서 실행 가능한 최소 파일만 추출할 수 있습니다.  
+이 방식은 컨테이너 이미지 크기를 줄이고, 배포 환경에 Node.js만 있으면 바로 실행이 가능하여 매우 효율적입니다.
+
+```js
+// next.config.js
+module.exports = {
+  output: "standalone",
+  assetPrefix: process.env.NEXT_PUBLIC_ASSET_PREFIX, // 예: https://**STATIC_S3_BUCKET**.s3.**AWS_REGION**.amazonaws.com/**STATIC_S3_PREFIX**/**BRANCH_NAME**/**SERVICE**/_next/static/
+};
+```
+
+빌드 시에는 다음과 같이 standalone 디렉토리가 생성됩니다.
+
+```
+dist/**SERVICE_PATH**/.next/standalone/
+```
+
+여기에는 서버 실행에 필요한 최소 파일과 server.js가 포함됩니다.
+
+실행은 아래처럼 단순하게 가능합니다.
+
+```bash
+node standalone/**SERVICE_PATH**/server.js
+```
+
+---
+
+## 2. TypeScript incremental 빌드와 캐시 활용
+
+빌드 속도를 높이기 위해 TypeScript의 incremental 옵션을 사용합니다.  
+증분 빌드는 이전 빌드 정보를 활용해 변경된 부분만 다시 컴파일하므로, 캐시와 함께 사용할 때 빌드 시간이 더욱 단축됩니다.
+
+```jsonc
+// tsconfig.json
+{
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildinfo"
+    // ...기타 옵션
+  }
+}
+```
+
+빌드를 실행하면 프로젝트 루트(혹은 지정한 경로)에 **.tsbuildinfo** 파일이 생성됩니다. 이 파일에는 이전 컴파일 결과와 의존성 정보가 저장되어, 다음 빌드 시 변경된 파일만 빠르게 다시 빌드할 수 있습니다.
+
+- **.tsbuildinfo**: 증분 빌드 정보를 담고 있는 파일로, 변경된 부분만 다시 컴파일할 수 있게 도와줍니다.
+- **dist/**: 실제로 컴파일된 js, d.ts 등 빌드 산출물이 저장되는 디렉토리입니다.
+
+GitLab CI에서 **.next/cache**를 적극적으로 활용하기 때문에, 증분 빌드의 효과가 극대화됩니다. TypeScript incremental 빌드와 Next.js의 빌드 캐시가 결합되어, 전체 빌드 시간이 크게 단축됩니다.
+
+---
+
+## 3. 정적 파일 S3 업로드 및 서빙
+
+Next.js의 정적 파일(**.next/static**)은 S3에 업로드하여 서빙합니다.  
+assetPrefix를 S3 주소(또는 S3와 연동된 CDN 주소)로 지정하면, 클라이언트가 정적 리소스를 S3(또는 CDN)에서 직접 받아가므로 서버 부하가 줄고, CDN을 연동할 경우 전 세계 어디서나 빠른 응답이 가능합니다.
+
+```js
+// next.config.js
+module.exports = {
+  assetPrefix: process.env.NEXT_PUBLIC_ASSET_PREFIX, // 예: https://**STATIC_S3_BUCKET**.s3.**AWS_REGION**.amazonaws.com/**STATIC_S3_PREFIX**/**BRANCH_NAME**/**SERVICE**/_next/static/
+};
+```
+
+CI에서는 빌드 후 아래처럼 S3에 업로드합니다.
+
+```bash
+aws s3 sync dist/**SERVICE_PATH**/.next/static s3://**STATIC_S3_BUCKET**/**STATIC_S3_PREFIX**/**BRANCH_NAME**/**SERVICE**/_next/static/ --delete
+```
+
+---
+
+## 4. Next.js 빌드 캐시(.next/cache) 활용
+
+빌드 캐시를 적극적으로 활용하면, 빌드 속도가 크게 단축됩니다.  
+**.next/cache**를 S3에 저장하고, 빌드 시작 시 S3에서 받아와 복원합니다.
+
+### 캐시 복원
+
+```bash
+aws s3 sync s3://**STATIC_S3_BUCKET**/nextjs-cache/**BRANCH_NAME**/ dist/**SERVICE_PATH**/.next/cache/ || true
+```
+
+### 캐시 저장
+
+```bash
+aws s3 sync dist/**SERVICE_PATH**/.next/cache/ s3://**STATIC_S3_BUCKET**/nextjs-cache/**BRANCH_NAME**/ --delete
+```
+
+### (추가) GitLab 로컬 디스크 캐시
+
+S3 외에도, GitLab CI의 로컬 디스크 캐시를 활용하면 네트워크 비용 없이 더 빠른 캐시 복원이 가능합니다.
+
+```yaml
+cache:
+  key:
+    files:
+      - package-lock.json
+      # 필요시 주요 소스 파일, 환경변수 등 추가
+  paths:
+    - node_modules/
+```
+
+**.next/cache**는 아래와 같이 S3를 통해서만 관리합니다.
+
+```bash
+# 캐시 복원
+aws s3 sync s3://**STATIC_S3_BUCKET**/nextjs-cache/**BRANCH_NAME**/ dist/**SERVICE_PATH**/.next/cache/ || true
+
+# 캐시 저장
+aws s3 sync dist/**SERVICE_PATH**/.next/cache/ s3://**STATIC_S3_BUCKET**/nextjs-cache/**BRANCH_NAME**/ --delete
+```
+
+---
+
+## 5. GitLab CI 파이프라인 구조 (예시)
+
+아래는 실제 환경에 맞게 변수화한 GitLab CI의 주요 부분 예시입니다.
+
+```yaml
+stages:
+  - build_service
+  - deploy_service
+
+build_service:
+  # ...생략
+  before_script:
+    # S3에서 .next/cache 복원
+    - aws s3 sync s3://**STATIC_S3_BUCKET**/nextjs-cache/**BRANCH_NAME**/ dist/**SERVICE_PATH**/.next/cache/ || true
+  script:
+    # Docker build (standalone)
+    # 컨테이너에서 static, cache 추출
+    # S3에 static, cache 업로드
+  cache:
+    key:
+      files:
+        - package-lock.json
+        # 필요시 주요 소스 파일, 환경변수 등 추가
+    paths:
+      - node_modules/
+  # ...생략
+
+deploy_service:
+  # ...생략
+  script:
+    # S3에 static 업로드
+    # ECR 이미지로 Beanstalk 배포
+```
+
+---
+
+## 6. ECR 컨테이너 이미지 빌드 및 배포
+
+Dockerfile은 멀티스테이지 빌드로 구성되어 있습니다.
+
+- **node_modules**는 Docker의 **--mount=type=cache** 옵션을 활용하여 로컬 디스크 캐시로 빠르게 설치됩니다.
+- **.next/cache**를 복사하여 빌드 속도가 최적화됩니다.
+- standalone 빌드 후, 필요한 파일만 추출합니다.
+- 정적 파일만 별도로 복사하여 이미지 크기를 최소화합니다.
+- 최종 이미지는 **ECR_REPOSITORY**에 업로드됩니다.
+
+```dockerfile
+FROM node:22.14.0-alpine AS deps
+WORKDIR /app
+COPY --link package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm,id=**CACHE_VERSION**-**SERVICE**-**BRANCH_NAME**-npm-cache \
+    npm ci --quiet
+
+FROM node:22.14.0-alpine AS builder
+WORKDIR /app
+COPY --link --from=deps /app/node_modules ./node_modules
+COPY --link dist/**SERVICE_PATH**/.next/cache/ ./dist/**SERVICE_PATH**/.next/cache/
+# ...생략
+RUN ./build.sh **BRANCH_NAME** **SERVICE**
+
+FROM node:22.14.0-alpine AS runner
+WORKDIR /app
+COPY --link --from=builder /app/dist/**SERVICE_PATH**/.next/standalone ./standalone
+COPY --link --from=builder /app/dist/**SERVICE_PATH**/.next/static ./dist/**SERVICE_PATH**/.next/static
+COPY --link --from=builder /app/dist/**SERVICE_PATH**/.next/cache ./dist/**SERVICE_PATH**/.next/cache
+USER node
+EXPOSE 3000
+CMD ["node", "standalone/**SERVICE_PATH**/server.js"]
+```
+
+> 정적 파일(static)만 별도로 복사하여 컨테이너 이미지 크기를 최소화할 수 있습니다.
+
+---
+
+## 7. 결론 및 정리
+
+- **standalone 빌드**로 컨테이너 이미지가 최소화되고, 실행 환경이 단순해집니다.
+- **증분 빌드**와 **.next/cache**로 빌드 속도가 극대화됩니다.
+- **정적 파일은 S3**에 업로드하여 assetPrefix로 서빙이 가능합니다.
+- **GitLab CI**에서 **node_modules**, **.next/cache**를 S3와 로컬 디스크에 캐싱하여 빌드 시간이 단축됩니다.
+- **ECR**에 이미지를 업로드하여 Beanstalk 등에서 바로 배포가 가능합니다.
+
+이런 구조를 통해 빠르고 안정적으로 배포할 수 있었습니다.
+
+---
