@@ -17,23 +17,125 @@ react-hook-form에 기여를 하고 싶어 이슈를 들락날락 하다가 찾�
 
 ## 원인 분석
 
-코드를 살펴본 결과, 문제의 원인을 찾을 수 있었습니다:
+React Hook Form의 내부 구조를 깊이 분석한 결과, 문제의 근본 원인을 찾을 수 있었습니다.
 
-- React Hook Form은 내부적으로 <strong>_state.mount</strong>라는 상태를 관리합니다
-- 사용자가 필드와 상호작용하기 전까지 <strong>_state.mount</strong>는 <strong>false</strong> 상태로 유지됩니다
-- <strong>_getWatch</strong> 함수는 <strong>_state.mount</strong>가 <strong>false</strong>일 때 기본값을 반환하도록 설계되어 있습니다
-- <strong>reset()</strong> 함수에서 <strong>_state.mount</strong>를 <strong>true</strong>로 설정하지 않아서, <strong>watch()</strong>가 업데이트된 값 대신 기본값을 반환했습니다
+### \_state.mount의 역할
+
+React Hook Form은 내부적으로 <strong>\_state.mount</strong>라는 플래그를 사용하여 폼이 "마운트"되었는지 추적합니다. 이 플래그는 다음과 같은 역할을 합니다:
+
+- 초기값: <strong>false</strong>
+- 사용자가 필드와 상호작용(입력, 포커스 등)하면 <strong>true</strong>로 변경됨
+- <strong>watch()</strong> 메서드가 어떤 값을 반환할지 결정하는 중요한 조건
+
+### 버그가 발생한 이유
+
+<strong>watch()</strong> 메서드 내부의 <strong>_getWatch</strong> 함수는 다음과 같은
+로직으로 동작합니다:
+
+```typescript
+// 간소화된 _getWatch 로직
+function _getWatch(names, defaultValue) {
+  // _state.mount가 false면 defaultValue 반환
+  if (!_state.mount) {
+    return defaultValue;
+  }
+
+  // _state.mount가 true면 실제 폼 값 반환
+  return getFieldValue(names);
+}
+```
+
+문제는 <strong>reset()</strong> 메서드에서 발생했습니다:
+
+1. 사용자가 필드와 상호작용하기 전에 <strong>reset()</strong>을 호출
+2. <strong>reset()</strong>은 내부적으로 폼 값을 업데이트하지만, <strong>
+     _state.mount
+   </strong>는 여전히 <strong>false</strong>
+3. 이후 <strong>watch()</strong>를 호출하면 <strong>\_getWatch</strong>가 <strong>\_state.mount === false</strong>를 확인
+4. 업데이트된 폼 값 대신 <strong>defaultValue</strong>(undefined)를 반환
+
+### 재현 조건
+
+```typescript
+// 버그 재현 코드
+const { reset, watch } = useForm({
+  defaultValues: { name: "initial" },
+});
+
+// 사용자가 필드와 상호작용하기 전에 reset 호출
+reset({ name: "updated" });
+
+// undefined 반환! (기대값: 'updated')
+console.log(watch("name"));
+```
+
+이 버그는 7.63.0 버전의 리팩토링 과정에서 <strong>reset()</strong> 함수가 <strong>\_state.mount</strong>를 적절히 업데이트하지 않으면서 발생했습니다.
+
+### 버그 발생 플로우
+
+```mermaid
+flowchart TD
+    A[useForm 초기화] --> B[_state.mount = false]
+    B --> C{사용자 액션}
+    C -->|필드 상호작용 전| D[reset 호출]
+    C -->|필드 입력| E[_state.mount = true]
+    D --> F[폼 값 업데이트]
+    F --> G[_state.mount는 여전히 false]
+    G --> H[watch 호출]
+    H --> I{_state.mount 체크}
+    I -->|false| J[❌ undefined 반환]
+    E --> K[watch 호출]
+    K --> L{_state.mount 체크}
+    L -->|true| M[✅ 실제 값 반환]
+```
 
 ## 해결 방법
 
-해결책은 비교적 간단했습니다. <strong>_reset</strong> 함수 내부에서 <strong>_state.mount = true</strong>를 설정하여, <strong>watch()</strong>가 항상 올바른 값을 반환하도록 수정했습니다.
+해결책은 <strong>reset()</strong> 함수 내부에서 <strong>\_state.mount</strong>의 값을 결정하는 조건부 로직을 수정하는 것이었습니다.
+
+### 기존 코드 (버그 발생)
 
 ```typescript
-// _reset 함수 내부
-_state.mount = true;
+// createFormControl.ts의 _reset 함수 내부
+_state.mount =
+  !_proxyFormState.isValid ||
+  !!keepStateOptions.keepIsValid ||
+  !!keepStateOptions.keepDirtyValues;
 ```
 
-또한 이 버그가 재발하지 않도록 테스트 케이스도 추가했습니다.
+기존 로직은 폼의 validation 상태와 keep 옵션에만 의존하고 있었습니다. 이로 인해 <strong>reset()</strong>으로 값을 설정해도 <strong>\_state.mount</strong>가 <strong>false</strong>로 남아있는 경우가 발생했습니다.
+
+### 수정된 코드
+
+```typescript
+_state.mount =
+  !!keepStateOptions.keepDirtyValues ||
+  (!_options.shouldUnregister && !isEmptyObject(values));
+```
+
+수정된 로직은 더 간결하면서도 핵심적인 조건에 집중합니다:
+
+- dirty 값을 유지하도록 설정되어 있거나 (`keepDirtyValues`)
+- **필드 등록을 해제하지 않으면서 값이 비어있지 않은 경우** (`!shouldUnregister && !isEmptyObject(values)`)
+
+특히 두 번째 조건이 핵심입니다. <strong>reset()</strong>으로 값을 설정하면 <strong>values</strong>가 비어있지 않게 되므로, <strong>\_state.mount</strong>가 <strong>true</strong>로 설정되어 <strong>watch()</strong>가 올바른 값을 반환하게 됩니다.
+
+### 테스트 케이스 추가
+
+또한 이 버그가 재발하지 않도록 테스트 케이스도 추가했습니다:
+
+```typescript
+it('should return correct value after reset when _state.mount is false', () => {
+  const { watch, reset, getValues } = useForm({
+    defaultValues: { name: 'initial' }
+  });
+
+  reset({ name: 'updated' });
+
+  expect(watch('name')).toBe('updated');
+  expect(getValues('name')).toBe('updated');
+});
+```
 
 ## 리뷰 과정
 
