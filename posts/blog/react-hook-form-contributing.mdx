@@ -9,7 +9,7 @@ thumbnailUrl: /posts/thumbnail/react-hook-form.png
 
 ## 문제 발견
 
-React Hook Form 7.63.0 버전부터 이상한 버그를 발견했습니다. <strong>reset()</strong> 메서드를 호출한 직후 <strong>watch()</strong> 메서드가 <strong>undefined</strong>를 반환하는 문제였습니다.
+react-hook-form에 기여를 하고 싶어 이슈를 들락날락 하다가 찾았습니다. React Hook Form 7.63.0 버전부터 발생한 버그였는데, <strong>reset()</strong> 메서드를 호출한 직후 <strong>watch()</strong> 메서드가 <strong>undefined</strong>를 반환하는 문제였습니다.
 
 정상적인 상황이라면 <strong>reset()</strong>으로 폼 값을 초기화한 후 <strong>watch()</strong>를 호출하면 초기화된 값이 반환되어야 하는데, 특정 조건에서 <strong>undefined</strong>가 반환됐습니다.
 
