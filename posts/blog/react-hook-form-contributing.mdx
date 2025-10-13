@@ -1,0 +1,51 @@
+---
+title: React Hook Form에 첫 기여하기
+date: 2025-10-13
+description: watch() 메서드가 reset() 직후 undefined를 반환하는 버그를 해결한 경험을 공유합니다.
+thumbnailUrl: /posts/thumbnail/react-hook-form.png
+---
+
+![](/posts/thumbnail/react-hook-form.png)
+
+## 문제 발견
+
+React Hook Form 7.63.0 버전부터 이상한 버그를 발견했습니다. <strong>reset()</strong> 메서드를 호출한 직후 <strong>watch()</strong> 메서드가 <strong>undefined</strong>를 반환하는 문제였습니다.
+
+정상적인 상황이라면 <strong>reset()</strong>으로 폼 값을 초기화한 후 <strong>watch()</strong>를 호출하면 초기화된 값이 반환되어야 하는데, 특정 조건에서 <strong>undefined</strong>가 반환됐습니다.
+
+특히 이 문제는 사용자가 필드와 상호작용하기 전에 <strong>reset()</strong>을 호출했을 때 발생했습니다.
+
+## 원인 분석
+
+코드를 살펴본 결과, 문제의 원인을 찾을 수 있었습니다:
+
+- React Hook Form은 내부적으로 <strong>_state.mount</strong>라는 상태를 관리합니다
+- 사용자가 필드와 상호작용하기 전까지 <strong>_state.mount</strong>는 <strong>false</strong> 상태로 유지됩니다
+- <strong>_getWatch</strong> 함수는 <strong>_state.mount</strong>가 <strong>false</strong>일 때 기본값을 반환하도록 설계되어 있습니다
+- <strong>reset()</strong> 함수에서 <strong>_state.mount</strong>를 <strong>true</strong>로 설정하지 않아서, <strong>watch()</strong>가 업데이트된 값 대신 기본값을 반환했습니다
+
+## 해결 방법
+
+해결책은 비교적 간단했습니다. <strong>_reset</strong> 함수 내부에서 <strong>_state.mount = true</strong>를 설정하여, <strong>watch()</strong>가 항상 올바른 값을 반환하도록 수정했습니다.
+
+```typescript
+// _reset 함수 내부
+_state.mount = true;
+```
+
+또한 이 버그가 재발하지 않도록 테스트 케이스도 추가했습니다.
+
+## 리뷰 과정
+
+PR을 올린 후 메인테이너인 @bluebill1049님으로부터 빠른 피드백을 받았습니다.
+
+처음에는 dirty values와 valid state에 대한 잠재적인 리그레션에 대한 우려가 있었습니다. 이는 매우 합리적인 지적이었고, 기존 코드의 조건부 마운트 체크를 유지하면서도 버그를 해결할 수 있도록 솔루션을 개선했습니다.
+
+메인테이너의 빠르고 명확한 피드백 덕분에 금방 문제를 해결할 수 있었고, 결과적으로 PR은 머지됐습니다.
+
+---
+
+**참고 링크:**
+
+- [Pull Request #13091](https://github.com/react-hook-form/react-hook-form/pull/13091)
+- [Issue #13088](https://github.com/react-hook-form/react-hook-form/issues/13088)
