@@ -109,31 +109,30 @@ _state.mount =
 
 ```typescript
 _state.mount =
+  !_proxyFormState.isValid ||
+  !!keepStateOptions.keepIsValid ||
   !!keepStateOptions.keepDirtyValues ||
-  (!_options.shouldUnregister && !isEmptyObject(values));
+  (!_options.shouldUnregister && !isEmptyObject(values)); // 이 조건 추가
 ```
 
-수정된 로직은 더 간결하면서도 핵심적인 조건에 집중합니다:
+해결책은 간단합니다. 기존 조건에 `(!_options.shouldUnregister && !isEmptyObject(values))` 조건을 추가했습니다.
 
-- dirty 값을 유지하도록 설정되어 있거나 (`keepDirtyValues`)
-- **필드 등록을 해제하지 않으면서 값이 비어있지 않은 경우** (`!shouldUnregister && !isEmptyObject(values)`)
-
-특히 두 번째 조건이 핵심입니다. <strong>reset()</strong>으로 값을 설정하면 <strong>values</strong>가 비어있지 않게 되므로, <strong>\_state.mount</strong>가 <strong>true</strong>로 설정되어 <strong>watch()</strong>가 올바른 값을 반환하게 됩니다.
+이 조건은 "필드 등록을 해제하지 않으면서 값이 비어있지 않은 경우"를 의미합니다. <strong>reset()</strong>으로 값을 설정하면 <strong>values</strong>가 비어있지 않게 되므로, <strong>\_state.mount</strong>가 <strong>true</strong>로 설정되어 <strong>watch()</strong>가 올바른 값을 반환하게 됩니다.
 
 ### 테스트 케이스 추가
 
 또한 이 버그가 재발하지 않도록 테스트 케이스도 추가했습니다:
 
 ```typescript
-it('should return correct value after reset when _state.mount is false', () => {
+it("should return correct value after reset when _state.mount is false", () => {
   const { watch, reset, getValues } = useForm({
-    defaultValues: { name: 'initial' }
+    defaultValues: { name: "initial" },
   });
 
-  reset({ name: 'updated' });
+  reset({ name: "updated" });
 
-  expect(watch('name')).toBe('updated');
-  expect(getValues('name')).toBe('updated');
+  expect(watch("name")).toBe("updated");
+  expect(getValues("name")).toBe("updated");
 });
 ```
 
