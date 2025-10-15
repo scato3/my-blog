@@ -387,16 +387,12 @@ Context, Provider, Boundary는 모두 함수형 합성이다.
 function App() {
   return (
     <Router>
-      {" "}
       {/* 라우팅 관심사 */}
       <QueryProvider>
-        {" "}
         {/* 데이터 관심사 */}
         <AuthProvider>
-          {" "}
           {/* 인증 관심사 */}
           <ThemeProvider>
-            {" "}
             {/* 스타일 관심사 */}
             <Routes />
           </ThemeProvider>
