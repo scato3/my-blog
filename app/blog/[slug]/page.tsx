@@ -60,6 +60,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: doc.title,
     description: doc.description,
     path: `/blog/${doc.slug}`,
-    image: `/${doc.thumbnailUrl}`,
+    image: doc.thumbnailUrl,
   });
 }
