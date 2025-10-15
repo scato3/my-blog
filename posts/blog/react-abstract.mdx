@@ -13,7 +13,9 @@ thumbnailUrl: /posts/thumbnail/icon-react.png
 
 많은 개발자들이 이 문장에 함정처럼 빠진다.
 
-리액트의 진정한 힘은 단지 선언형 표현이 아니라, 함수형 추상화를 통해 의미의 계층을 만드는 데 있다.
+리액트의 진정한 힘은 단지 선언형 표현이 아니라, 함수형 추상화를 통해 **의미의 계층을 형성**하는 데 있다.
+
+---
 
 ## 1. 추상화는 감추는 게 아니라, '관점을 고정하는 것'
 
@@ -25,20 +27,18 @@ thumbnailUrl: /posts/thumbnail/icon-react.png
 
 ```jsx
 <button onClick={() => doSomething()}>확인</button>
+이건 단순히 브라우저의 DOM 이벤트를 처리하는 명령형 UI다.
 ```
-
-이건 단순히 브라우저의 DOM 이벤트를 잡아 처리하는 명령형 UI다.
 
 리액트가 이를 JSX로 감쌌다고 해서 추상화된 것은 아니다.
 
-<strong>onClick이라는 이벤트가 무엇을 의미하는가</strong>를 다시 정의할 때
+onClick이라는 이벤트가 무엇을 의미하는가를 다시 정의할 때,
 비로소 추상화가 시작된다.
 
-FP에서 추상화란 "구조를 감추는 것"이 아니라 <strong>"의미를 드러내는 것"</strong>이다.
+FP에서 추상화란 "구조를 감추는 것"이 아니라 "의미를 드러내는 것"이다.
 
-## 2. 잘못된 추상화 — 선언형 안에 숨은 '명령형의 그림자'
-
-다음 코드를 보자.
+2. 잘못된 추상화 — 선언형 안에 숨은 '명령형의 그림자'
+   다음 코드를 보자.
 
 ```jsx
 function SearchInput({ value, onChange }) {
@@ -48,25 +48,21 @@ function SearchInput({ value, onChange }) {
 
 겉보기엔 "선언형" 컴포넌트처럼 보이지만, 이건 단지 DOM 이벤트를 Props로 전달하는 위임일 뿐이다.
 
-즉, <strong>"이 입력 필드가 무엇을 의미하는가"</strong>가 코드에 드러나지 않는다.
+즉, "이 입력 필드가 무엇을 의미하는가"가 코드에 드러나지 않는다.
 
 리액트는 선언형 UI로 "상태 → 화면"의 매핑은 잘 표현하지만,
 
-그 행위의 의미는 여전히 개발자가 추상화해줘야 한다.
+그 행위의 의미까지는 추상화하지 않는다.
 
 이 부분을 놓치는 순간, JSX는 다시 명령형 이벤트의 포장지로 되돌아간다.
 
-## 3. 함수형 추상화 — "효과를 다루지 않는 구조"
+3. 함수형 추상화 — "효과를 제거하지 말고, 통제하라"
+   리액트의 철학은 다음처럼 표현할 수 있다.
 
-리액트의 철학은 다음 한 줄에 요약된다.
+UI ≈ f(state)
+이는 함수형 프로그래밍의 선언이다.
 
-```
-UI = f(state)
-```
-
-이건 함수형 프로그래밍의 선언이다.
-
-UI는 상태의 순수한 함수이며, 사이드 이펙트는 경계 밖으로 밀려나야 한다.
+UI는 상태에 대한 순수 함수처럼 다뤄지고, 부수효과는 관리 가능한 경계 밖으로 격리되어야 한다.
 
 아래 예시는 흔한 "불완전한 추상화"의 예다.
 
@@ -83,9 +79,9 @@ function SearchBox({ onSearch }) {
 }
 ```
 
-이 컴포넌트는 UI를 잘 조합하지만, 여전히 onSearch에 명령형 의존성을 남긴다.
+이 컴포넌트는 UI를 잘 조합하지만, 여전히 명령 실행의 의미가 드러나지 않는다.
 
-FP적으로 해석하면 여전히 사이드 이펙트가 컴포넌트 내부에 남아있다.
+onSearch는 단순한 콜백이지만, "언제, 무엇을 검색하는가"를 의미 영역으로 추상화하지 못했다.
 
 이를 FP 스타일로 바꿔보자.
 
@@ -122,13 +118,13 @@ function SearchBox() {
 }
 ```
 
-이제 이 구조는 <strong>UI는 순수 함수로, 효과는 캡슐화된 명령으로</strong> 분리됐다.
+이제 이 구조는 UI는 순수 함수로, 효과는 명령으로 분리됐다.
 
-사이드 이펙트가 즉시 실행되지 않고 함수로 감싸져 있어, 실행 시점을 컴포넌트 외부에서 제어할 수 있다.
+사이드 이펙트가 즉시 실행되지 않고 함수로 감싸져 있어, 실행 시점을 외부에서 제어할 수 있다.
 
-이건 단지 코드 리팩터링이 아니라, <strong>평가 시점을 제어하는 함수형 추상화</strong>의 구현이다.
+즉, 단순 리팩터링이 아니라 평가 시점을 제어하는 함수형 추상화의 구현이다.
 
-더 나아가, React Query를 사용하면 이런 패턴을 더욱 선언적으로 만들 수 있다.
+React Query를 사용하면 이 패턴을 더욱 선언적으로 표현할 수 있다.
 
 ```jsx
 function useSearch(query) {
@@ -154,13 +150,12 @@ function SearchBox() {
 }
 ```
 
-이제 "언제 API를 호출할지"라는 효과의 실행 조건까지 선언적으로 표현됐다.
+이제 효과의 실행 조건까지 선언적으로 제어되고,
 
-## 4. 추상화의 척도 — 합성 가능성
+컴포넌트는 순수한 UI 함수를 유지한다.
 
-FP에서 좋은 추상화는 <strong>"합성 가능한 구조"</strong>(다른 함수와 조합했을 때 의미가 유지되는 것)로 평가된다.
-
-즉, 다른 함수와 쉽게 조합될 때 의미가 유지되어야 한다.
+4. 추상화의 척도 — 합성 가능성
+   FP에서 좋은 추상화는 "합성 가능한 구조"(다른 함수와 조합했을 때 의미가 보존되는 것)로 평가된다.
 
 현대 리액트에서는 Custom Hook과 Suspense가 이를 가능하게 한다.
 
@@ -173,7 +168,7 @@ function LoadingBoundary({ children }) {
   );
 }
 
-// 사용처에서 로딩 상태를 신경쓰지 않음
+// 사용처에서 로딩 상태를 직접 신경쓰지 않음
 function UserProfile({ userId }) {
   const user = use(fetchUser(userId)); // React 19+ use() hook
   return <div>{user.name}</div>;
@@ -188,52 +183,50 @@ function App() {
 }
 ```
 
-이는 단순한 재사용 패턴이 아니라, <strong>"로딩과 에러라는 개념을 경계(Boundary)로 추상화"</strong>한 것이다.
+이는 단순한 재사용이 아니라, "로딩, 에러, 경계"라는 개념적 관심사를 합성 가능한
+추상 구조로 분리한 것이다.
 
-UI는 다시 하나의 합성 가능한 단위로 환원되며, 이는 FP적 사고의 정수다.
+단, 참고하자면 리액트의 합성은 수학적 함수합성과는 달리 순서 의존적 구조다.
 
-<strong>
-  좋은 추상화는 재사용되는 컴포넌트가 아니라, 의미적으로 조합 가능한 함수다.
-</strong>
+Provider의 중첩 순서에 따라 의미가 달라지기 때문이다.
 
-## 5. 선언형 추상화의 철학 — 제어권의 이동
+그럼에도 불구하고, 의미적 일관성이 유지된다면 FP적 조합성과 동일한 효과를 얻을 수 있다.
 
-"선언형 프로그래밍"의 핵심은 <strong>제어권의 포기</strong>(내가 직접 제어하지 않고 시스템에 위임하는 것)다.
+5. 선언형 추상화의 철학 — 제어권의 이동
+   "선언형 프로그래밍"의 본질은 제어권의 포기다.
 
-즉, "내가 데이터를 직접 조작하지 않고, 흐름을 프레임워크나 시스템에 위임하는 것"이 선언형의 본질이다.
+즉, "데이터의 흐름을 내가 직접 제어하지 않고, 시스템에게 위임하는 것"이다.
 
-이 원리를 리액트 추상화에 적용하면 다음과 같은 변화가 일어난다.
+이 철학을 리액트 추상화에 적용하면 다음과 같다.
 
-- <strong>상태 제어</strong>가 useState나 useReducer 같은 순수한 인터페이스로
-  이동한다
-- <strong>효과 제어</strong>는 useEffect, useQuery, Suspense 같은 외부 경계로
-  밀려난다
-- <strong>의미 제어</strong>는 useAuth, useSearch, useCart처럼 도메인 단위로
-  추상화된다
+상태 제어 → useState, useReducer 같은 순수한 인터페이스로 이동
+효과 제어 → useEffect, useQuery, Suspense 등의 경계로 이동
+의미 제어 → useAuth, useSearch, useCart처럼 도메인 단위로 추상화
+즉, 진짜 선언형 추상화란 의미 중심의 제어권 재배치다.
 
-즉, 선언형 추상화의 진짜 형태는 <strong>의미 중심의 제어권 재배치</strong>다.
+6. 리액트 추상화의 3단계
+   함수형 구조로 본다면, 리액트의 추상화는 세 단계로 진화한다.
 
-## 6. 리액트 추상화의 3단계
+1단계: 표현 추상화
 
-함수형 구조로 본다면, 리액트의 추상화는 명확히 세 단계로 나뉜다.
+JSX, Virtual DOM, 렌더링 구조 제어
+함수형 대응: view = f(state)
+2단계: 로직 추상화
 
-<strong>1단계: 표현 추상화</strong>- JSX, Virtual DOM, 렌더링 구조 제어 - 함수형
-대응: <strong>view = f(state)</strong>
+상태, 이펙트, 비즈니스 로직의 모듈화
+함수형 대응: 순수함수와 효과 함수의 분리
+3단계: 의미 추상화
 
-<strong>2단계: 로직 추상화</strong>- 상태, 이펙트, 비즈니스 로직의 모듈화 -
-함수형 대응: <strong>순수함수와 효과 함수의 분리</strong>
+UI 컴포넌트를 도메인 언어로 구성
+함수형 대응: 의미적 API 계층(semantic API layer)
+진짜 추상화는 세 번째 단계에서 일어난다.
 
-<strong>3단계: 의미 추상화</strong>- UI 컴포넌트를 도메인 언어로 구성 - 함수형
-대응: <strong>도메인 DSL 구성</strong>
+이 시점부터 "UI 구조"가 아니라 "업무 행위"가 코드의 상위 개념으로 등장한다.
 
-진짜 추상화는 세 번째 층에서 일어난다.
-
-이때부터 "UI 구조"가 아니라 "업무 행위"가 코드의 최상위 개념으로 등장한다.
-
-### 의미 추상화의 실제 예시
+의미 추상화의 실제 예시
 
 ```jsx
-//  표현 추상화 수준 (UI 중심)
+// 표현 추상화 수준 (UI 중심)
 function ProductCard({ product }) {
   const [cart, setCart] = useState([]);
 
@@ -275,32 +268,24 @@ function useCart() {
 }
 ```
 
-이제 <strong>addToCart</strong>는 <strong>"장바구니에 추가한다"는 업무 행위</strong>를 나타내는 도메인 언어가 된다.
+이제 addToCart는 "장바구니에 상품을 추가한다"는 도메인 의미를 가진다.
 
-HTTP 요청, 상태 업데이트, 알림 표시 같은 구현 세부사항은 모두 감춰지고, 오직 <strong>의미</strong>만 남는다.
+HTTP 요청, 상태 업데이트, 토스트 메시지 같은 구현 세부사항은 감춰지고, 오직 의도된 의미만 남는다.
 
-## 7. 함수형 사고로 보는 '추상화 냄새'
+7. 함수형 사고로 보는 '추상화 냄새'
+   잘못된 추상화는 일관된 패턴을 가진다.
 
-잘못된 추상화는 일관된 패턴을 가진다.
+FP적 시각에서 보면, 이는 대부분 "부수효과가 제어되지 않은 구조"에서 나타난다.
 
-FP적 시각으로 보면, 이는 대부분 "부수효과가 제어되지 않은 구조"에서 나타난다.
+대표적인 추상화 냄새들:
 
-<strong>대표적인 추상화 냄새들:</strong>
+Prop drilling everywhere — 상태가 문맥 없이 흘러내린다 → Context, Custom Hook으로 추상화
+Generic Component 남용 — 추상화가 의미를 잃은 범용화 → 도메인 중심 컴포넌트로 분리
+useEffect 남용 — 사이드 이펙트가 컴포넌트 안으로 침투 → Effect를 명령 레벨로 추출
+UI와 로직 결합 — 책임 경계가 모호 → View와 Behavior를 함수로 분리
+추상화의 목적은 복잡성을 숨기는 것이 아니라, 효과를 제어 가능한 영역으로 격리하는 것이다.
 
-- <strong>Prop drilling everywhere</strong>: 상태가 문맥 없이 흘러내린다 →
-  Context, Custom Hook으로 추상화
-- <strong>Generic Component 남용</strong>: 의미 없는 범용화 → 도메인 중심
-  컴포넌트로 분리
-- <strong>useEffect 남용</strong>: 사이드 이펙트가 컴포넌트 안으로 침투 →
-  Effect를 명령 레벨로 추출
-- <strong>UI와 로직 결합</strong>: 순수성과 책임이 불명확 → View와 Behavior를
-  함수로 분리
-
-<strong>
-  추상화의 목적은 복잡성을 숨기는 것이 아니라, 효과를 격리하는 것이다.
-</strong>
-
-### 구체적인 개선 예시
+개선 예시
 
 ```jsx
 // useEffect 남용 (효과가 컴포넌트 안에 침투)
@@ -336,82 +321,52 @@ function UserProfile({ userId }) {
 }
 ```
 
-이제 데이터 페칭 로직은 <strong>useUser</strong>라는 재사용 가능한 명령으로 추상화되고, 컴포넌트는 순수한 렌더링 함수로 남는다.
+이제 데이터 페칭 로직은 useUser라는 재사용 가능한 명령으로 캡슐화되고,
 
-## 8. React를 "함수 합성의 의미 공간"으로 보기
+컴포넌트는 순수 렌더링 함수로 남는다.
 
-리액트 전체 트리를 함수형으로 보자면,
+8. React를 "함수 합성의 의미 공간"으로 보기
+   리액트의 컴포넌트 구조를 함수형 프로그래밍 관점에서 보면,
 
-각 컴포넌트는 순수 함수이며,
+각각의 컴포넌트는 입력(props)을 받아 UI를 반환하는 순수 함수처럼 동작하는 단위다.
 
-컴포넌트 조합은 함수 합성이다.
+그리고 여러 컴포넌트의 중첩은 수학의 함수 합성과 유사한 구조다.
 
 ```jsx
 // 고차 함수로서의 UI
 const App = compose(
-  withRouting,
-  withSession,
-  withTheme,
-  withErrorBoundary
+withRouting,
+withSession,
+withTheme,
+withErrorBoundary
 )(Page);
-```
+현대 리액트에선 이 구조가 다음과 같이 바뀐다.
 
-현대적인 방식으로는 이렇게 표현된다:
-
-```jsx
 function App() {
-  return (
-    <Router>
-      <SessionProvider>
-        <ThemeProvider>
-          <ErrorBoundary>
-            <Page />
-          </ErrorBoundary>
-        </ThemeProvider>
-      </SessionProvider>
-    </Router>
-  );
-}
+return (
+
+<Router>
+  <SessionProvider>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <Page />
+      </ErrorBoundary>
+    </ThemeProvider>
+  </SessionProvider>
+</Router>
+); }
 ```
 
-이 구조는 사실상 <strong>"고차 함수로서의 UI"</strong>를 보여준다.
+각 Provider는 환경(Context) 을 합성하며,
 
-Context, Provider, Boundary는 모두 함수형 합성이다.
+이는 함수형 프로그래밍의 “환경 합성” 개념에 해당한다.
 
-리액트 생태계 전체가 함수형 합성의 구문 체계 안에서 돌아가는 셈이다.
+리액트 생태계는 이러한 합성을 통해 관심사를 분리하고 의미를 누적시킨다.
 
-### 합성의 힘: 관심사의 분리
+9. 실전 패턴: 도메인 중심 추상화
+   이론을 실전에 적용해보자. 장바구니 기능을 서로 다른 추상화 수준으로 구현해보면 다음과 같다.
 
-```jsx
-// 각 레이어는 독립적인 관심사를 처리
-function App() {
-  return (
-    <Router>
-      {/* 라우팅 관심사 */}
-      <QueryProvider>
-        {/* 데이터 관심사 */}
-        <AuthProvider>
-          {/* 인증 관심사 */}
-          <ThemeProvider>
-            {/* 스타일 관심사 */}
-            <Routes />
-          </ThemeProvider>
-        </AuthProvider>
-      </QueryProvider>
-    </Router>
-  );
-}
-```
-
-각 Provider는 특정 관심사를 캡슐화하고, 중첩을 통해 합성된다.
-
-이는 FP에서 말하는 "함수 합성을 통한 복잡성 관리"의 완벽한 예시다.
-
-## 9. 실전 패턴: 도메인 중심 추상화
-
-이론을 실전에 적용해보자. 전자상거래 장바구니 기능을 세 가지 추상화 수준으로 구현해본다.
-
-### Level 1: 표현 추상화
+Level 1: 표현 추상화
 
 ```jsx
 function CartButton({ productId }) {
@@ -425,7 +380,7 @@ function CartButton({ productId }) {
         body: JSON.stringify({ productId }),
       });
       alert("추가 완료!");
-    } catch (error) {
+    } catch {
       alert("실패!");
     } finally {
       setLoading(false);
@@ -442,7 +397,7 @@ function CartButton({ productId }) {
 
 문제점: API 호출, 상태 관리, UI가 모두 뒤섞여 있다.
 
-### Level 2: 로직 추상화
+Level 2: 로직 추상화
 
 ```jsx
 function useAddToCart() {
@@ -468,12 +423,12 @@ function CartButton({ productId }) {
 }
 ```
 
-개선점: 로직이 Hook으로 분리됐지만, 여전히 "추가"라는 행위에 집중한다.
+로직이 분리됐지만, 여전히 “추가”라는 행위 자체를 다루는 수준이다.
 
-### Level 3: 의미 추상화
+Level 3: 의미 추상화
+// 도메인 언어로 추상화
 
 ```jsx
-// 도메인 언어로 추상화
 function useCart() {
   const queryClient = useQueryClient();
 
@@ -484,32 +439,23 @@ function useCart() {
 
   const addItem = useMutation({
     mutationFn: (product) => api.cart.addItem(product),
-    onSuccess: () => {
+    onSuccess: (product) => {
       queryClient.invalidateQueries(["cart"]);
       analytics.track("cart_item_added");
       toast.success(`${product.name}이(가) 담겼습니다`);
     },
   });
 
-  const removeItem = useMutation({
-    mutationFn: (productId) => api.cart.removeItem(productId),
-    onSuccess: () => {
-      queryClient.invalidateQueries(["cart"]);
-    },
-  });
-
-  const hasItem = (productId) => cart.some((item) => item.id === productId);
+  const hasItem = (productId) => cart.some((i) => i.id === productId);
 
   return {
     cart,
     addItem: addItem.mutate,
-    removeItem: removeItem.mutate,
     hasItem,
     isAdding: addItem.isPending,
   };
 }
 
-// 사용처: 비즈니스 의미가 명확함
 function ProductCard({ product }) {
   const { addItem, hasItem, isAdding } = useCart();
   const inCart = hasItem(product.id);
@@ -525,35 +471,19 @@ function ProductCard({ product }) {
 }
 ```
 
-이제 컴포넌트는 <strong>"장바구니에 담는다"</strong>는 도메인 언어로 생각한다.
+이제 컴포넌트는 “장바구니에 담는다”는 도메인적 의미를 표현하고,
 
-HTTP, 상태 동기화, 분석 추적 같은 구현 세부사항은 모두 <strong>useCart</strong> 안에 캡슐화됐다.
+API 호출, 상태 동기화, 분석 추적은 전부 캡슐화된다.
 
-## 10. 결론 — 리액트 추상화의 본질은 "의미의 함수화"
+10. 결론 — 리액트 추상화의 본질은 "의미의 함수화"
+    정리하자면:
 
-정리하자면, 이런 이야기다:
+리액트의 선언형 문법은 추상화의 도구이지, 추상화 그 자체가 아니다.
+좋은 추상화는 UI를 감싸는 게 아니라, 의도를 함수로 드러내는 것이다.
+함수형 추상화는 부수효과를 제거하는 게 아니라, 제어 가능한 경계로 격리한다.
+리액트의 추상화란 상태의 함수가 아니라, 의미의 함수로 나아가는 여정이다.
+선언형 UI는 출발점이다.
 
-1. <strong>
-     리액트의 선언형 문법은 추상화의 도구이지, 추상화 그 자체는 아니다.
-   </strong>
-2. <strong>
-     좋은 추상화는 UI를 감싸는 게 아니라, 의도를 함수로 드러내는 것이다.
-   </strong>
-3. <strong>
-     함수형 추상화는 부수효과를 경계 밖으로 밀어내고, 조합 가능한 의미의 층을
-     만든다.
-   </strong>
+리액트의 진짜 추상화는, 함수형 철학으로 ‘의미’를 설계하는 데 있다.
 
-> <strong>
->   "리액트의 추상화란, 상태의 함수가 아닌 의미의 함수로 나아가는 여정이다."
-> </strong>
-
-선언형 UI는 출발점일 뿐이다.
-
-리액트의 진짜 추상화는, 함수형 철학으로 '의미'를 구성하는 일이다.
-
-추상화는 기술이 아니라 사고방식이다.
-
-함수형 철학으로 생각하고, 의미 중심으로 설계하라.
-
-그것이 리액트가 의도한 진정한 추상화다.
+추상화는 기술이 아니라, 사고방식이다.
