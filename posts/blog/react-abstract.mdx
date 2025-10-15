@@ -204,12 +204,12 @@ UI는 다시 하나의 합성 가능한 단위로 환원되며, 이는 FP적 사
 
 이 원리를 리액트 추상화에 적용하면 다음과 같은 변화가 일어난다.
 
-- <strong>상태 제어</strong>가 `useState`나 `useReducer` 같은 순수한
-  인터페이스로 이동한다
-- <strong>효과 제어</strong>는 `useEffect`, `useQuery`, `Suspense` 같은 외부
-  경계로 밀려난다
-- <strong>의미 제어</strong>는 `useAuth`, `useSearch`, `useCart`처럼 도메인
-  단위로 추상화된다
+- <strong>상태 제어</strong>가 useState나 useReducer 같은 순수한 인터페이스로
+  이동한다
+- <strong>효과 제어</strong>는 useEffect, useQuery, Suspense 같은 외부 경계로
+  밀려난다
+- <strong>의미 제어</strong>는 useAuth, useSearch, useCart처럼 도메인 단위로
+  추상화된다
 
 즉, 선언형 추상화의 진짜 형태는 <strong>의미 중심의 제어권 재배치</strong>다.
 
