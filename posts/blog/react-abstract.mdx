@@ -27,8 +27,9 @@ thumbnailUrl: /posts/thumbnail/icon-react.png
 
 ```jsx
 <button onClick={() => doSomething()}>확인</button>
-이건 단순히 브라우저의 DOM 이벤트를 처리하는 명령형 UI다.
 ```
+
+이건 단순히 브라우저의 DOM 이벤트를 처리하는 명령형 UI다.
 
 리액트가 이를 JSX로 감쌌다고 해서 추상화된 것은 아니다.
 
@@ -170,7 +171,7 @@ function LoadingBoundary({ children }) {
 
 // 사용처에서 로딩 상태를 직접 신경쓰지 않음
 function UserProfile({ userId }) {
-  const user = use(fetchUser(userId)); // React 19+ use() hook
+  const user = use(fetchUser(userId));
   return <div>{user.name}</div>;
 }
 
@@ -335,16 +336,16 @@ function UserProfile({ userId }) {
 ```jsx
 // 고차 함수로서의 UI
 const App = compose(
-withRouting,
-withSession,
-withTheme,
-withErrorBoundary
+  withRouting,
+  withSession,
+  withTheme,
+  withErrorBoundary
 )(Page);
+```
+
 현대 리액트에선 이 구조가 다음과 같이 바뀐다.
 
-function App() {
-return (
-
+```jsx
 <Router>
   <SessionProvider>
     <ThemeProvider>
@@ -354,7 +355,6 @@ return (
     </ThemeProvider>
   </SessionProvider>
 </Router>
-); }
 ```
 
 각 Provider는 환경(Context) 을 합성하며,
@@ -363,8 +363,7 @@ return (
 
 리액트 생태계는 이러한 합성을 통해 관심사를 분리하고 의미를 누적시킨다.
 
-9. 실전 패턴: 도메인 중심 추상화
-   이론을 실전에 적용해보자. 장바구니 기능을 서로 다른 추상화 수준으로 구현해보면 다음과 같다.
+9.  도메인 중심 추상화 장바구니 기능을 서로 다른 추상화 수준으로 구현해보면 다음과 같다.
 
 Level 1: 표현 추상화
 
@@ -426,9 +425,9 @@ function CartButton({ productId }) {
 로직이 분리됐지만, 여전히 “추가”라는 행위 자체를 다루는 수준이다.
 
 Level 3: 의미 추상화
-// 도메인 언어로 추상화
 
 ```jsx
+// 도메인 언어로 추상화
 function useCart() {
   const queryClient = useQueryClient();
 
