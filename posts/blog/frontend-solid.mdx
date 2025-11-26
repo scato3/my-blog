@@ -1,0 +1,220 @@
+---
+title: 프론트엔드 SOLID — 선언형 UI에 맞춘 실천과 한계
+date: 2025-11-26
+description: SOLID를 프론트엔드 맥락에 맞게 다시 쓰고, 적용법과 트레이드오프를 정리한다.
+thumbnailUrl: /posts/thumbnail/icon-react.png
+---
+
+![](/posts/thumbnail/icon-react.png)
+
+## 프론트엔드 SOLID — 선언형 UI에 맞춘 실천과 한계
+
+백엔드에서 온 SOLID를 프론트에 그대로 들이대면 **추상화 남용**과 **DX 악화**라는 역효과가 난다.
+선언형 UI, 상태 관리, 렌더링 파이프라인을 고려한 맞춤형 원칙이 필요하다.
+
+---
+
+## 1. 프론트엔드에서 SOLID가 흔히 미끄러지는 지점
+
+- UI는 입·출력만 있는 순수 함수가 아니다: 렌더링, 상호작용, 네트워크 효과가 동시에 얽힌다.
+- 서버 상태(캐싱·동기화)와 클라이언트 상태(로컬 UI·폼)를 섞으면 책임이 모호해지고 캐시 전략도 꼬인다.
+- 접근성/시맨틱 계약을 깨면 LSP가 무너진다. 대체 가능한 컴포넌트는 시맨틱을 유지해야 한다.
+- 과한 추상화는 번들 팽창과 온보딩 비용으로 돌아온다. 프론트에서는 <strong>필요할 때만</strong>이 더 중요하다.
+
+## 2. S — 단일 책임: 표현·상태·효과를 다시 쪼갠다
+
+UI는 **보여주는 책임**에만 집중시키고, 복잡한 데이터 로직은 훅으로 분리한다.
+
+```tsx
+// 여러 책임이 섞여 있음
+function ProductList() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetch("/api/products").then((r) => r.json()),
+      fetch("/api/inventory").then((r) => r.json()),
+    ]).then(([products, inventory]) => {
+      // 데이터 조합 + 필터링 로직이 컴포넌트 안에
+      const available = products.filter((p) => inventory[p.id]?.stock > 0);
+      setProducts(available);
+      setLoading(false);
+    });
+  }, []);
+
+  return loading ? <Spinner /> : <List items={products} />;
+}
+
+// 데이터 로직을 훅으로 분리
+function useAvailableProducts() {
+  const { data: products } = useQuery({
+    queryKey: ["products"],
+    queryFn: () => fetch("/api/products").then((r) => r.json()),
+  });
+
+  const { data: inventory } = useQuery({
+    queryKey: ["inventory"],
+    queryFn: () => fetch("/api/inventory").then((r) => r.json()),
+  });
+
+  return useMemo(() => {
+    if (!products || !inventory) return [];
+    return products.filter((p) => inventory[p.id]?.stock > 0);
+  }, [products, inventory]);
+}
+
+function ProductList() {
+  const products = useAvailableProducts();
+  return products.length === 0 ? <Empty /> : <List items={products} />;
+}
+```
+
+SRP의 목표는 **파일 개수를 늘리는 게 아니라**, 복잡한 로직을 격리해서 테스트·재사용·변경을 쉽게 만드는 것이다.
+
+- 프론트 적용: 여러 API 조합, 데이터 변환, 복잡한 상태 관리는 훅으로 분리한다.
+- 한계·완화: 단순히 `useQuery`를 한 번 감싸는 건 오버엔지니어링이다. 실제로 로직이 복잡하거나 재사용될 때만 분리한다.
+
+## 3. O — 개방·폐쇄: 정책은 주입, 구조는 고정
+
+스타일·레이아웃은 토큰으로, 비즈니스 로직은 함수나 슬롯(children) 주입으로 바꾼다.
+
+```tsx
+// 정책을 외부에서 주입
+function SortableList({
+  items,
+  sort,
+}: {
+  items: Item[];
+  sort: (i: Item[]) => Item[];
+}) {
+  return sort(items).map((item) => <ListItem key={item.id} item={item} />);
+}
+
+// 토큰 기반 스타일로 확장성 확보
+const buttonTokens = {
+  primary: "bg-blue-600 text-white",
+  ghost: "border border-slate-300 text-slate-700",
+};
+
+function Button({ variant = "primary", ...rest }) {
+  return <button className={buttonTokens[variant]} {...rest} />;
+}
+```
+
+OCP는 <strong>분기문 금지</strong>가 아니라, 분기를 <strong>구성 요소나 함수 인자로 이동</strong>시키는 것이다.
+
+- 프론트 적용: 정렬·필터 같은 로직은 함수로, 화면 조각은 슬롯으로, 스타일은 토큰으로 주입해 교체 가능하게 만든다.
+- 한계·완화: Prop 조합 폭발을 막기 위해 기본값을 줄이고, 타입/유니온으로 허용 변형만 남겨 나머지 조합은 막는다.
+
+## 4. L — 리스코프 치환: 시맨틱과 계약을 유지한 합성
+
+대체 가능한 컴포넌트는 입력·출력 시그니처뿐 아니라 시맨틱 계약을 유지해야 한다. 상속 대신 Polymorphic 합성으로 버튼/링크 치환 시에도 ARIA·키보드 계약을 한 곳에 모은다.
+
+```tsx
+type PolymorphicProps<E extends React.ElementType> = {
+  as?: E;
+  children: React.ReactNode;
+} & Omit<React.ComponentPropsWithoutRef<E>, "as" | "children">;
+function Action<E extends React.ElementType = "button">({
+  as,
+  children,
+  ...props
+}: PolymorphicProps<E>) {
+  const Component = as || "button";
+  return <Component {...props}>{children}</Component>;
+}
+```
+
+## 5. I — 인터페이스 분리: API 타입과 UI 계약을 필요한 만큼만 쪼갠다
+
+컴포넌트가 필요하지 않은 데이터에 의존하지 않도록, Props를 최소한으로 받는다.
+
+```tsx
+// 거대한 객체를 통째로 받음
+type User = {
+  id: string;
+  name: string;
+  avatar: string;
+  email: string;
+  preferences: Settings;
+  billing: BillingInfo;
+};
+
+function UserCard({ user }: { user: User }) {
+  // name과 avatar만 쓰는데 User 전체를 의존
+  return (
+    <div>
+      <img src={user.avatar} />
+      <h3>{user.name}</h3>
+    </div>
+  );
+}
+
+// 필요한 것만 받기
+function UserCard({ name, avatar }: { name: string; avatar: string }) {
+  return (
+    <div>
+      <img src={avatar} />
+      <h3>{name}</h3>
+    </div>
+  );
+}
+
+// 훅도 동일: 데이터 훅과 UI 상태 훅을 분리
+function useUserProfile(userId: string) {
+  // 서버 데이터만 다룸
+  return useQuery({
+    queryKey: ["user", userId],
+    queryFn: () => fetch(`/api/users/${userId}`).then((r) => r.json()),
+  });
+}
+
+function useProfileForm() {
+  // UI 상태만 다룸
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  return { editing, setEditing, draft, setDraft };
+}
+```
+
+- 프론트 적용: 컴포넌트는 필요한 최소 props만 받고, 거대한 객체는 상위에서 쪼개서 내린다. 훅도 "데이터 로딩"과 "UI 상태"를 분리한다.
+- 한계·완화: 과한 세분화는 DX를 해친다. props가 3~4개 이하면 굳이 나누지 않고, 실제로 재사용되거나 테스트 격리가 필요할 때만 분리한다.
+
+## 6. D — 의존성 역전: 브라우저/서버/테스트를 가르는 추상화
+
+프론트 DIP는 오버엔지니어링이 되기 쉬우므로, 효과 경계에서만 최소한으로 적용한다.
+
+```ts
+// 추상화된 Fetcher 인터페이스
+export interface Fetcher {
+  get<T>(url: string): Promise<T>;
+}
+
+// 구현체는 주입
+export const fetcher: Fetcher = {
+  get: (url) => fetch(url).then((r) => r.json()),
+};
+
+// 서비스는 인터페이스만 의존
+export function createUserService(client: Fetcher) {
+  return {
+    loadProfile: (id: string) => client.get(`/api/users/${id}`),
+  };
+}
+```
+
+테스트에서는 <strong>Fetcher</strong>를 목킹하고, 서버/클라이언트 환경 차이는 인터페이스 뒤로 숨긴다.
+
+- 프론트 적용: 네트워크, 스토리지, 플랫폼 차이를 인터페이스 뒤로 숨기고 테스트에선 목으로 대체한다.
+- 한계·완화: 클라이언트 DI는 번들·복잡도 비용이 크므로, 네트워크/스토리지/로깅 등 효과 경계에만 제한적으로 쓴다.
+
+## 7. 한계와 트레이드오프
+
+- 추상화 남용 → 번들/런타임 비용 상승, 온보딩 난도 증가.
+- Prop/훅 세분화 → 사용성 저하 가능. DX를 확인하며 점진적으로 분리해야 한다.
+- DIP 남용 → 프론트에서는 컨테이너/주입 코드가 오버헤드. 제품 성숙도에 맞춰 최소한으로 도입.
+- 디자인 시스템 강제 → 실험 속도 둔화. 초기에는 토큰부터, 이후 컴포넌트/패턴으로 확장.
+
+프론트엔드 SOLID의 목표는 <strong>모범 원칙 적용</strong>이 아니라, 사용자 경험을 해치지 않으면서도 변화에 유연한 UI 경계를 세우는 것이다.
