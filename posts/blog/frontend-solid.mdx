@@ -26,7 +26,7 @@ SOLID는 분명 좋은 원칙인데, 프론트엔드에서는 **맥락이 달랐
 
 ## 1. 왜 이게 문제가 되는가?
 
-프론트엔드 개발에서 실제로 겪는 5가지 고통:
+프론트엔드 개발에서 실제로 겪는 문제들 예시:
 
 ### 문제 1: 컴포넌트가 300줄을 넘어가고 테스트하기 어렵다
 
@@ -54,8 +54,8 @@ function ProductList() {
 **왜 문제인가?**
 
 - 데이터 fetching, 변환, 렌더링이 모두 섞여 있어서 테스트하려면 실제 API 호출 필요
-- 재사용 불가능 (다른 곳에서 같은 데이터 로직 써야 하면 복사-붙여넣기)
-- 변경 범위 예측 불가 (재고 로직 바꾸려다가 렌더링까지 건드림)
+- 재사용 불가능
+- 변경 범위 예측 불가
 
 ### 문제 2: 새 필터 추가할 때마다 컴포넌트를 수정해야 한다
 
@@ -94,10 +94,10 @@ function FakeButton({ onClick, children }) {
 
 **왜 문제인가?**
 
-- Enter/Space 키 동작 안 함 (키보드 사용자 접근 불가)
+- Enter/Space 키 동작 안 함
 - Tab으로 포커스 안 됨
-- 스크린 리더가 버튼으로 인식 못함 (시각장애인 사용 불가)
-- 진짜 **<button>**으로 교체하면 스타일 깨짐 (시맨틱 계약 위반)
+- 스크린 리더가 버튼으로 인식 못함
+- 진짜 **<button>**으로 교체하면 스타일 깨짐
 
 ### 문제 4: 거대한 User 객체 때문에 불필요한 리렌더가 발생한다
 
@@ -114,7 +114,7 @@ function UserCard({ user }: { user: User }) {
 
 // 사용
 <UserCard user={user} />;
-// user.email이 바뀌어도 UserCard가 리렌더됨 (실제로는 안 써도)
+// user.email이 바뀌어도 UserCard가 리렌더됨
 ```
 
 **왜 문제인가?**
@@ -184,7 +184,7 @@ function ProductList() {
 
 **언제 과한가:**
 
-- 단순히 **useQuery** 한 번 감싸는 것 (오버엔지니어링)
+- 단순히 **useQuery** 한 번 감싸는 것
 - 로직이 5줄 이하고 재사용 안 됨
 
 ---
@@ -268,13 +268,13 @@ function Action<E extends React.ElementType = "button">({
 
 **언제 적용하나:**
 
-- 디자인 시스템 기본 컴포넌트 (Button, Link, Heading)
+- 디자인 시스템 기본 컴포넌트 (Button, Link, Heading ...)
 - 접근성 요구사항이 있는 프로젝트
 - 버튼/링크 교체가 자주 일어남
 
 **언제 과한가:**
 
-- 모든 컴포넌트에 Polymorphic 적용 (타입 복잡도 상승)
+- 모든 컴포넌트에 Polymorphic 적용
 - 접근성 요구사항 없는 내부 툴
 
 ---
@@ -302,14 +302,13 @@ function UserCard({ name, avatar }: { name: string; avatar: string }) {
 
 **해결된 것:**
 
-- 불필요한 리렌더 방지 (name, avatar만 비교)
+- 불필요한 리렌더 방지
 - 테스트 시 간단한 props만 전달 (`{ name: "test", avatar: "url" }`)
-- 재사용성 향상 (User 객체 없어도 사용 가능)
-
-**언제 적용하나:**
+- 재사용성 향상
+  **언제 적용하나:**
 
 - 거대한 객체(User, Product)를 받는 컴포넌트
-- 성능 최적화 필요 (리스트 아이템 등)
+- 성능 최적화 필요
 - 훅도 "데이터 로딩"과 "UI 상태"를 분리
 
 **언제 과한가:**
@@ -353,7 +352,7 @@ function saveUserPreference(key: string, value: string, storage: Storage) {
 
 **해결된 것:**
 
-- SSR에서 에러 없음 (memoryStorage 사용)
+- SSR에서 에러 없음
 - 테스트 시 memoryStorage mock으로 간단히 대체
 - 환경 분기 코드가 한 곳에만 집중
 
@@ -390,23 +389,6 @@ function saveUserPreference(key: string, value: string, storage: Storage) {
 3. **거대한 객체 전달 줄이기**
    - UserCard가 User 전체를 받는가? → name, avatar만 받도록
    - props가 5개 넘으면 실제로 다 쓰는지 확인
-
-### 팀에 제안할 것
-
-1. **디자인 시스템 Button에 접근성 체크리스트**
-
-   - 키보드 동작 (Enter/Space)
-   - 포커스 스타일
-   - ARIA label
-
-2. **필터/정렬이 많은 리스트는 함수 주입 패턴 고려**
-
-   - filterType이 4개 넘으면 filterFn 주입으로 전환
-   - 조합 필터 필요하면 함수 주입 필수
-
-3. **SSR 프로젝트는 Storage 인터페이스 도입**
-   - localStorage 직접 사용 금지
-   - **lib/storage.ts**에 browserStorage/memoryStorage 구현
 
 ### 과하게 하지 말 것
 
