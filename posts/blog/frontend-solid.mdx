@@ -97,7 +97,7 @@ function FakeButton({ onClick, children }) {
 - Enter/Space 키 동작 안 함
 - Tab으로 포커스 안 됨
 - 스크린 리더가 버튼으로 인식 못함
-- 진짜 **<button>**으로 교체하면 스타일 깨짐
+- 진짜 버튼으로 교체하면 스타일 깨짐
 
 ### 문제 4: 거대한 User 객체 때문에 불필요한 리렌더가 발생한다
 
@@ -368,27 +368,6 @@ function saveUserPreference(key: string, value: string, storage: Storage) {
 - Storage, Logger 외에는 환경 분기(**typeof window**)로 충분
 
 ---
-
-## 3. 정리 및 독자 액션
-
-> SOLID의 목적은 프론트에서 "클린 코드"가 아니라,
-> **변경 비용을 최소화하는 UI 경계를 만드는 것**이다.
-
-### 지금 당장 할 수 있는 것
-
-1. **300줄 넘는 컴포넌트 찾기**
-
-   - 데이터 fetching + 변환 로직을 훅으로 분리
-   - 한 파일에서 useState/useEffect 5개 넘으면 분리 신호
-
-2. **div 버튼을 button 태그로 교체**
-
-   - **<div onClick>** → **<button>**
-   - 키보드 테스트: Tab으로 포커스 → Enter로 동작 확인
-
-3. **거대한 객체 전달 줄이기**
-   - UserCard가 User 전체를 받는가? → name, avatar만 받도록
-   - props가 5개 넘으면 실제로 다 쓰는지 확인
 
 ### 과하게 하지 말 것
 
