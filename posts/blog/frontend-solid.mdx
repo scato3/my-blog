@@ -74,25 +74,43 @@ function ProductList() {
 SRP의 목표는 **파일 개수를 늘리는 게 아니라**, 복잡한 로직을 격리해서 테스트·재사용·변경을 쉽게 만드는 것이다.
 
 - 프론트 적용: 여러 API 조합, 데이터 변환, 복잡한 상태 관리는 훅으로 분리한다.
-- 한계·완화: 단순히 `useQuery`를 한 번 감싸는 건 오버엔지니어링이다. 실제로 로직이 복잡하거나 재사용될 때만 분리한다.
+- 한계·완화: 단순히 **useQuery**를 한 번 감싸는 건 오버엔지니어링이다. 실제로 로직이 복잡하거나 재사용될 때만 분리한다.
 
 ## 3. O — 개방·폐쇄: 정책은 주입, 구조는 고정
 
-스타일·레이아웃은 토큰으로, 비즈니스 로직은 함수나 슬롯(children) 주입으로 바꾼다.
+변경이 자주 일어나는 부분(스타일, 필터 조건, 렌더 로직)은 외부에서 주입받아 수정 없이 확장한다.
 
 ```tsx
-// 정책을 외부에서 주입
-function SortableList({
-  items,
-  sort,
-}: {
-  items: Item[];
-  sort: (i: Item[]) => Item[];
-}) {
-  return sort(items).map((item) => <ListItem key={item.id} item={item} />);
+// 나쁜 예: 새 타입 추가할 때마다 컴포넌트 수정 필요
+function UserList({ users, filterType }) {
+  let filtered = users;
+  if (filterType === "active") {
+    filtered = users.filter(u => u.isActive);
+  } else if (filterType === "admin") {
+    filtered = users.filter(u => u.role === "admin");
+  } else if (filterType === "premium") {
+    filtered = users.filter(u => u.isPremium);
+  }
+  // filterType 추가될 때마다 if문 추가...
+  return <List items={filtered} />;
 }
 
-// 토큰 기반 스타일로 확장성 확보
+// 좋은 예: 필터 조건을 함수로 주입
+function UserList({
+  users,
+  filterFn = (users) => users
+}: {
+  users: User[];
+  filterFn?: (users: User[]) => User[];
+}) {
+  return <List items={filterFn(users)} />;
+}
+
+// 사용: 새 필터 추가 시 UserList 수정 불필요
+<UserList users={users} filterFn={u => u.filter(x => x.isActive)} />
+<UserList users={users} filterFn={u => u.filter(x => x.role === "admin")} />
+
+// 스타일도 토큰으로 주입
 const buttonTokens = {
   primary: "bg-blue-600 text-white",
   ghost: "border border-slate-300 text-slate-700",
@@ -103,20 +121,32 @@ function Button({ variant = "primary", ...rest }) {
 }
 ```
 
-OCP는 <strong>분기문 금지</strong>가 아니라, 분기를 <strong>구성 요소나 함수 인자로 이동</strong>시키는 것이다.
+OCP는 **분기문 금지**가 아니라, 변경 빈도가 높은 로직을 **주입 가능한 경계**로 만드는 것이다.
 
-- 프론트 적용: 정렬·필터 같은 로직은 함수로, 화면 조각은 슬롯으로, 스타일은 토큰으로 주입해 교체 가능하게 만든다.
-- 한계·완화: Prop 조합 폭발을 막기 위해 기본값을 줄이고, 타입/유니온으로 허용 변형만 남겨 나머지 조합은 막는다.
+- 프론트 적용: 필터·정렬 같은 정책은 함수로, 화면 조각은 children으로, 스타일은 토큰으로 주입한다.
+- 한계·완화: 모든 분기를 주입으로 바꾸면 Prop 폭발한다. 변형이 2~3개 이하면 그냥 union type으로 두고, 자주 바뀌거나 조합이 많을 때만 주입한다.
 
 ## 4. L — 리스코프 치환: 시맨틱과 계약을 유지한 합성
 
-대체 가능한 컴포넌트는 입력·출력 시그니처뿐 아니라 시맨틱 계약을 유지해야 한다. 상속 대신 Polymorphic 합성으로 버튼/링크 치환 시에도 ARIA·키보드 계약을 한 곳에 모은다.
+대체 가능한 컴포넌트는 타입 시그니처뿐 아니라 **접근성·키보드·시맨틱 계약**도 유지해야 한다.
 
 ```tsx
+// 나쁜 예: div로 버튼을 만들면 키보드 접근성이 깨짐
+function FakeButton({ onClick, children }) {
+  return (
+    <div onClick={onClick} className="button">
+      {children}
+    </div>
+  );
+}
+// Enter/Space 키 동작 안 함, 포커스 불가, 스크린 리더가 버튼으로 인식 못함
+
+// 좋은 예: Polymorphic으로 요소를 바꿔도 계약 유지
 type PolymorphicProps<E extends React.ElementType> = {
   as?: E;
   children: React.ReactNode;
 } & Omit<React.ComponentPropsWithoutRef<E>, "as" | "children">;
+
 function Action<E extends React.ElementType = "button">({
   as,
   children,
@@ -125,7 +155,14 @@ function Action<E extends React.ElementType = "button">({
   const Component = as || "button";
   return <Component {...props}>{children}</Component>;
 }
+
+// 사용: button일 때는 키보드 동작, a일 때는 링크 동작 모두 유지
+<Action>클릭</Action>
+<Action as="a" href="/home">홈으로</Action>
 ```
+
+- 프론트 적용: 컴포넌트를 교체할 때 시맨틱 HTML, ARIA 속성, 키보드 동작을 유지한다.
+- 한계·완화: Polymorphic 타입은 복잡하므로, 디자인 시스템의 기본 컴포넌트(Button, Link)에만 적용하고 일반 컴포넌트는 단순하게 유지한다.
 
 ## 5. I — 인터페이스 분리: API 타입과 UI 계약을 필요한 만큼만 쪼갠다
 
@@ -179,36 +216,50 @@ function useProfileForm() {
 }
 ```
 
-- 프론트 적용: 컴포넌트는 필요한 최소 props만 받고, 거대한 객체는 상위에서 쪼개서 내린다. 훅도 "데이터 로딩"과 "UI 상태"를 분리한다.
+- 프론트 적용: 컴포넌트는 필요한 최소 props만 받고, 거대한 객체는 상위에서 쪼개서 내린다. 훅도 **데이터 로딩**과 **UI 상태**를 분리한다.
 - 한계·완화: 과한 세분화는 DX를 해친다. props가 3~4개 이하면 굳이 나누지 않고, 실제로 재사용되거나 테스트 격리가 필요할 때만 분리한다.
 
 ## 6. D — 의존성 역전: 브라우저/서버/테스트를 가르는 추상화
 
-프론트 DIP는 오버엔지니어링이 되기 쉬우므로, 효과 경계에서만 최소한으로 적용한다.
+환경에 따라 구현이 달라지는 효과를 인터페이스 뒤로 숨긴다.
 
 ```ts
-// 추상화된 Fetcher 인터페이스
-export interface Fetcher {
-  get<T>(url: string): Promise<T>;
+// 나쁜 예: localStorage에 직접 의존
+function saveUserPreference(key: string, value: string) {
+  localStorage.setItem(key, value); // SSR에서 에러, 테스트 어려움
 }
 
-// 구현체는 주입
-export const fetcher: Fetcher = {
-  get: (url) => fetch(url).then((r) => r.json()),
+// 좋은 예: Storage 인터페이스로 추상화
+interface Storage {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+}
+
+// 브라우저 구현
+export const browserStorage: Storage = {
+  get: (key) => localStorage.getItem(key),
+  set: (key, value) => localStorage.setItem(key, value),
 };
 
-// 서비스는 인터페이스만 의존
-export function createUserService(client: Fetcher) {
+// SSR/테스트 구현
+export const memoryStorage: Storage = (() => {
+  const store = new Map<string, string>();
   return {
-    loadProfile: (id: string) => client.get(`/api/users/${id}`),
+    get: (key) => store.get(key) ?? null,
+    set: (key, value) => store.set(key, value),
   };
+})();
+
+// 사용: 환경에 따라 주입
+const storage = typeof window !== "undefined" ? browserStorage : memoryStorage;
+
+function saveUserPreference(key: string, value: string, storage: Storage) {
+  storage.set(key, value); // 어떤 환경에서든 동작
 }
 ```
 
-테스트에서는 <strong>Fetcher</strong>를 목킹하고, 서버/클라이언트 환경 차이는 인터페이스 뒤로 숨긴다.
-
-- 프론트 적용: 네트워크, 스토리지, 플랫폼 차이를 인터페이스 뒤로 숨기고 테스트에선 목으로 대체한다.
-- 한계·완화: 클라이언트 DI는 번들·복잡도 비용이 크므로, 네트워크/스토리지/로깅 등 효과 경계에만 제한적으로 쓴다.
+- 프론트 적용: localStorage, fetch 같은 플랫폼 API를 직접 쓰지 말고, 인터페이스로 감싸서 SSR/테스트 환경에서도 동작하게 만든다.
+- 한계·완화: DI 컨테이너는 프론트에서 오버헤드가 크다. Storage, Logger 같은 소수 인터페이스만 추상화하고, 나머지는 환경 분기(`typeof window`)로 처리한다.
 
 ## 7. 한계와 트레이드오프
 
