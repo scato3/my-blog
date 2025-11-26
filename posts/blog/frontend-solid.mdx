@@ -9,35 +9,28 @@ thumbnailUrl: /posts/thumbnail/icon-react.png
 
 ## 프론트엔드 SOLID — 선언형 UI에 맞춘 실천과 한계
 
-> 프론트엔드에서 SOLID는 '객체 설계'가 아니라,  
+컴포넌트 구조를 설계할 때마다 같은 고민이 반복됐다. 어떻게 하면 더 확장 가능하게 만들 수 있을까? 관심사 분리는 어디까지 해야 할까? 추상화는 언제 하는 게 적절할까? 유지보수성을 높이려면 무엇을 바꿔야 할까?
+
+이런 고민을 하다 보니 자연스럽게 OOP의 SOLID 원칙에 관심을 가지게 됐다. 하지만 막상 프론트엔드에 적용하려니 **완전히 들어맞지 않았다.**
+
+- 단일 책임? 컴포넌트는 렌더링·상태·효과가 한 곳에 섞여야 작동한다.
+- 개방·폐쇄? Props 조합이 폭발하면 오히려 복잡도가 올라간다.
+- 의존성 역전? DI 컨테이너는 번들 크기만 키운다.
+
+SOLID는 분명 좋은 원칙인데, 프론트엔드에서는 **맥락이 달랐다.** 그래서 프론트엔드에 맞는 접근을 다시 정리해보았다.
+
+> 프론트엔드에서 SOLID는 '객체 설계'가 아니라,
 > **변화 비용을 최소화하기 위한 UI 경계의 기술이다.**
 
-전통적인 OOP SOLID를 프론트에 그대로 적용하면 **추상화 남용**과 **DX 악화**라는 역효과가 난다.  
-선언형 UI, 상태 관리, 렌더링 파이프라인을 고려한 맞춤형 원칙이 필요하다.
-
 ---
 
-## 1. 프론트엔드에서 SOLID가 흔히 미끄러지는 지점
+## 1. 왜 이게 문제가 되는가?
 
-> 선언형 UI에서는 객체보다 **타이밍·상태·동기화·시맨틱**이 더 중요하다.  
-> 그래서 SOLID를 그대로 가져오면 대부분 어긋난다.
+프론트엔드 개발에서 실제로 겪는 5가지 고통:
 
-- UI는 입·출력만 있는 순수 함수가 아니다: 렌더링, 상호작용, 네트워크 효과가 동시에 얽힌다.
-- 서버 상태(캐싱·동기화)와 클라이언트 상태(로컬 UI·폼)를 섞으면 책임이 모호해지고 캐시 전략도 꼬인다.
-- 접근성/시맨틱 계약을 깨면 LSP가 무너진다. 대체 가능한 컴포넌트는 시맨틱을 유지해야 한다.
-- 과한 추상화는 번들 팽창과 온보딩 비용으로 돌아온다. 프론트에서는 **필요할 때만**이 더 중요하다.
-
----
-
-## 2. S — 단일 책임: 표현·상태·효과를 분리한다
-
-> 단일 책임은 파일을 쪼개는 게 아니라,  
-> **함께 바뀌는 것만 함께 두는 구조적 통찰**이다.
-
-UI는 **보여주는 책임**에만 집중시키고, 복잡한 데이터 로직은 훅으로 분리한다.
+### 문제 1: 컴포넌트가 300줄을 넘어가고 테스트하기 어렵다
 
 ```tsx
-// Bad: 컴포넌트가 데이터 fetching, 변환, 렌더링을 모두 담당
 function ProductList() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +50,101 @@ function ProductList() {
   return loading ? <Spinner /> : <List items={products} />;
 }
 ```
+
+**왜 문제인가?**
+
+- 데이터 fetching, 변환, 렌더링이 모두 섞여 있어서 테스트하려면 실제 API 호출 필요
+- 재사용 불가능 (다른 곳에서 같은 데이터 로직 써야 하면 복사-붙여넣기)
+- 변경 범위 예측 불가 (재고 로직 바꾸려다가 렌더링까지 건드림)
+
+### 문제 2: 새 필터 추가할 때마다 컴포넌트를 수정해야 한다
+
+```tsx
+function UserList({ users, filterType }) {
+  let filtered = users;
+  if (filterType === "active") {
+    filtered = users.filter((u) => u.isActive);
+  } else if (filterType === "admin") {
+    filtered = users.filter((u) => u.role === "admin");
+  } else if (filterType === "premium") {
+    filtered = users.filter((u) => u.isPremium);
+  }
+  // 새 필터 타입 추가할 때마다 여기를 수정...
+  return <List items={filtered} />;
+}
+```
+
+**왜 문제인가?**
+
+- 필터 조건이 추가될 때마다 UserList 컴포넌트를 열어서 if문 추가
+- 확장성 없음 (조합 필터는? "active이면서 premium"은?)
+- 테스트 케이스가 filterType 개수만큼 늘어남
+
+### 문제 3: div로 만든 버튼이 키보드로 작동하지 않는다
+
+```tsx
+function FakeButton({ onClick, children }) {
+  return (
+    <div onClick={onClick} className="button">
+      {children}
+    </div>
+  );
+}
+```
+
+**왜 문제인가?**
+
+- Enter/Space 키 동작 안 함 (키보드 사용자 접근 불가)
+- Tab으로 포커스 안 됨
+- 스크린 리더가 버튼으로 인식 못함 (시각장애인 사용 불가)
+- 진짜 **<button>**으로 교체하면 스타일 깨짐 (시맨틱 계약 위반)
+
+### 문제 4: 거대한 User 객체 때문에 불필요한 리렌더가 발생한다
+
+```tsx
+function UserCard({ user }: { user: User }) {
+  // name, avatar만 쓰는데 User 전체(20개 필드)를 받음
+  return (
+    <div>
+      <img src={user.avatar} />
+      <h3>{user.name}</h3>
+    </div>
+  );
+}
+
+// 사용
+<UserCard user={user} />;
+// user.email이 바뀌어도 UserCard가 리렌더됨 (실제로는 안 써도)
+```
+
+**왜 문제인가?**
+
+- 필요 없는 데이터 변경에도 리렌더링
+- UserCard를 다른 곳에 쓰려면 User 객체 전체를 만들어야 함
+- 테스트 시 거대한 mock User 객체 필요
+
+### 문제 5: localStorage가 SSR에서 에러를 낸다
+
+```tsx
+function saveUserPreference(key: string, value: string) {
+  localStorage.setItem(key, value); // SSR: "localStorage is not defined"
+}
+```
+
+**왜 문제인가?**
+
+- Next.js SSR에서 **localStorage is not defined** 에러로 빌드 실패
+- 테스트 환경에서 localStorage mock 설정 필요
+- 환경 분기 (typeof window !== "undefined")를 모든 곳에 추가하면 코드 지저분
+
+---
+
+## 2. 문제를 하나씩 해결하기
+
+### 문제 1 해결: S (단일 책임) — 데이터 로직을 훅으로 분리
+
+> 단일 책임은 파일을 쪼개는 게 아니라,
+> **변경 이유가 같은 것만 모으는 경계 설정**이다.
 
 ```tsx
 // Good: 데이터 로직을 훅으로 분리
@@ -83,35 +171,28 @@ function ProductList() {
 }
 ```
 
-**SRP의 목표**는 파일 개수를 늘리는 게 아니라, 복잡한 로직을 격리해서 테스트·재사용·변경을 쉽게 만드는 것이다.
+**해결된 것:**
 
-**프론트 적용**: 여러 API 조합, 데이터 변환, 복잡한 상태 관리는 훅으로 분리한다.
+- 데이터 로직 테스트는 **useAvailableProducts** 훅만 테스트하면 됨
+- 다른 컴포넌트에서도 **useAvailableProducts** 재사용 가능
+- 재고 로직 변경 시 훅만 수정, UI는 안전
 
-**한계·완화**: 단순히 useQuery를 한 번 감싸는 건 오버엔지니어링이다. 실제로 로직이 복잡하거나 재사용될 때만 분리한다.
+**언제 적용하나:**
+
+- 여러 API 조합, 데이터 변환, 복잡한 상태 관리
+- 로직이 10줄 이상이거나 2곳 이상에서 재사용
+
+**언제 과한가:**
+
+- 단순히 **useQuery** 한 번 감싸는 것 (오버엔지니어링)
+- 로직이 5줄 이하고 재사용 안 됨
 
 ---
 
-## 3. O — 개방·폐쇄: 정책은 주입, 구조는 고정
+### 문제 2 해결: O (개방·폐쇄) — 필터 함수를 주입받기
 
-> OCP는 확장을 위한 추상화가 아니라,  
+> OCP는 확장을 위한 추상화가 아니라,
 > **자주 바뀌는 부분을 밖으로 밀어내고 안 바뀌는 축을 고정하는 전략**이다.
-
-변경이 자주 일어나는 부분(스타일, 필터 조건, 렌더 로직)은 외부에서 주입받아 수정 없이 확장한다.
-
-```tsx
-// Bad: 필터 조건이 추가될 때마다 컴포넌트 수정 필요
-function UserList({ users, filterType }) {
-  let filtered = users;
-  if (filterType === "active") {
-    filtered = users.filter((u) => u.isActive);
-  } else if (filterType === "admin") {
-    filtered = users.filter((u) => u.role === "admin");
-  } else if (filterType === "premium") {
-    filtered = users.filter((u) => u.isPremium);
-  }
-  return <List items={filtered} />;
-}
-```
 
 ```tsx
 // Good: 필터 함수를 주입받아 확장에 열림
@@ -125,48 +206,38 @@ function UserList({
   return <List items={filterFn(users)} />;
 }
 
-// 사용
-<UserList users={users} filterFn={u => u.filter(x => x.isActive)} />
-<UserList users={users} filterFn={u => u.filter(x => x.role === "admin")} />
+// 사용: 새 필터 추가 시 UserList 수정 불필요
+<UserList users={users} filterFn={(u) => u.filter((x) => x.isActive)} />
+<UserList users={users} filterFn={(u) => u.filter((x) => x.role === "admin")} />
+<UserList
+  users={users}
+  filterFn={(u) => u.filter((x) => x.isActive && x.isPremium)}
+/>
 ```
 
-```tsx
-// Good: 스타일 변형은 토큰으로 관리
-const buttonTokens = {
-  primary: "bg-blue-600 text-white",
-  ghost: "border border-slate-300 text-slate-700",
-};
+**해결된 것:**
 
-function Button({ variant = "primary", ...rest }) {
-  return <button className={buttonTokens[variant]} {...rest} />;
-}
-```
+- 새 필터 추가 시 UserList 컴포넌트 수정 불필요
+- 조합 필터도 자유롭게 구성 가능
+- UserList는 "리스트 렌더링"에만 집중
 
-**OCP는 분기문 금지가 아니라**, 변경 빈도가 높은 로직을 주입 가능한 경계로 만드는 것이다.
+**언제 적용하나:**
 
-**프론트 적용**: 필터·정렬 같은 정책은 함수로, 화면 조각은 children으로, 스타일은 토큰으로 주입한다.
+- 필터·정렬 같은 정책이 자주 바뀜
+- 변형이 4개 이상이거나 조합 가능해야 함
+- 화면 조각은 **children**으로, 스타일은 토큰으로
 
-**한계·완화**: 모든 분기를 주입으로 바꾸면 Prop 폭발한다. 변형이 2~3개 이하면 그냥 union type으로 두고, 자주 바뀌거나 조합이 많을 때만 주입한다.
+**언제 과한가:**
+
+- 변형이 2~3개 이하면 그냥 union type (`variant: "active" | "admin"`)으로 충분
+- 모든 분기를 주입으로 바꾸면 Prop 폭발
 
 ---
 
-## 4. L — 리스코프 치환: 시맨틱과 계약을 유지한 합성
+### 문제 3 해결: L (리스코프 치환) — Polymorphic으로 시맨틱 유지
 
-> 대체 가능성은 타입이 아니라,  
+> 대체 가능성은 타입이 아니라,
 > **시맨틱·접근성·키보드 행동이라는 사용성 계약을 지켜야 성립한다.**
-
-대체 가능한 컴포넌트는 타입 시그니처뿐 아니라 접근성·키보드·시맨틱 계약도 유지해야 한다.
-
-```tsx
-// Bad: 시맨틱/접근성 계약 위반
-function FakeButton({ onClick, children }) {
-  return (
-    <div onClick={onClick} className="button">
-      {children}
-    </div>
-  );
-}
-```
 
 ```tsx
 // Good: Polymorphic 컴포넌트로 시맨틱 유지
@@ -184,44 +255,34 @@ function Action<E extends React.ElementType = "button">({
   return <Component {...props}>{children}</Component>;
 }
 
-// 사용
+// 사용: button일 때는 키보드 동작, a일 때는 링크 동작 모두 유지
 <Action>클릭</Action>
 <Action as="a" href="/home">홈으로</Action>
 ```
 
-**프론트 적용**: 컴포넌트를 교체할 때 시맨틱 HTML, ARIA 속성, 키보드 동작을 유지한다.
+**해결된 것:**
 
-**한계·완화**: Polymorphic 타입은 복잡하므로, 디자인 시스템의 기본 컴포넌트(Button, Link)에만 적용하고 일반 컴포넌트는 단순하게 유지한다.
+- **as="button"**일 때: Enter/Space 키 동작, 포커스, ARIA role="button" 자동
+- **as="a"**일 때: href 동작, Enter 키 네비게이션, role="link" 자동
+- 시맨틱 HTML을 유지하면서 스타일 일관성 확보
+
+**언제 적용하나:**
+
+- 디자인 시스템 기본 컴포넌트 (Button, Link, Heading)
+- 접근성 요구사항이 있는 프로젝트
+- 버튼/링크 교체가 자주 일어남
+
+**언제 과한가:**
+
+- 모든 컴포넌트에 Polymorphic 적용 (타입 복잡도 상승)
+- 접근성 요구사항 없는 내부 툴
 
 ---
 
-## 5. I — 인터페이스 분리: API 타입과 UI 계약을 필요한 만큼만 쪼갠다
+### 문제 4 해결: I (인터페이스 분리) — 필요한 최소 props만 받기
 
-> ISP는 타입 쪼개기가 아니라,  
+> ISP는 타입 쪼개기가 아니라,
 > **UI가 실제로 필요한 만큼만 데이터 의존성을 줄이는 절제의 기술**이다.
-
-컴포넌트가 필요하지 않은 데이터에 의존하지 않도록, Props를 최소한으로 받는다.
-
-```tsx
-// Bad: 필요 이상의 데이터에 의존
-type User = {
-  id: string;
-  name: string;
-  avatar: string;
-  email: string;
-  preferences: Settings;
-  billing: BillingInfo;
-};
-
-function UserCard({ user }: { user: User }) {
-  return (
-    <div>
-      <img src={user.avatar} />
-      <h3>{user.name}</h3>
-    </div>
-  );
-}
-```
 
 ```tsx
 // Good: 필요한 최소 props만 받음
@@ -233,43 +294,35 @@ function UserCard({ name, avatar }: { name: string; avatar: string }) {
     </div>
   );
 }
+
+// 사용
+<UserCard name={user.name} avatar={user.avatar} />;
+// user.email이 바뀌어도 UserCard는 리렌더 안 됨
 ```
 
-```tsx
-// Good: 훅도 데이터 로딩과 UI 상태를 분리
-function useUserProfile(userId: string) {
-  return useQuery({
-    queryKey: ["user", userId],
-    queryFn: () => fetch(`/api/users/${userId}`).then((r) => r.json()),
-  });
-}
+**해결된 것:**
 
-function useProfileForm() {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  return { editing, setEditing, draft, setDraft };
-}
-```
+- 불필요한 리렌더 방지 (name, avatar만 비교)
+- 테스트 시 간단한 props만 전달 (`{ name: "test", avatar: "url" }`)
+- 재사용성 향상 (User 객체 없어도 사용 가능)
 
-**프론트 적용**: 컴포넌트는 필요한 최소 props만 받고, 거대한 객체는 상위에서 쪼개서 내린다. 훅도 데이터 로딩과 UI 상태를 분리한다.
+**언제 적용하나:**
 
-**한계·완화**: 과한 세분화는 DX를 해친다. props가 3~4개 이하면 굳이 나누지 않고, 실제로 재사용되거나 테스트 격리가 필요할 때만 분리한다.
+- 거대한 객체(User, Product)를 받는 컴포넌트
+- 성능 최적화 필요 (리스트 아이템 등)
+- 훅도 "데이터 로딩"과 "UI 상태"를 분리
+
+**언제 과한가:**
+
+- props가 3~4개 이하면 굳이 안 나눔
+- 실제로 재사용되지 않거나 성능 문제 없으면 조기 최적화
 
 ---
 
-## 6. D — 의존성 역전: 브라우저/서버/테스트를 가르는 추상화
+### 문제 5 해결: D (의존성 역전) — Storage 인터페이스로 추상화
 
-> 프론트의 DIP는 추상화의 철학이 아니라,  
+> 프론트의 DIP는 추상화의 철학이 아니라,
 > **브라우저·서버·테스트 환경 차이를 숨기는 실용적 안전장치**다.
-
-환경에 따라 구현이 달라지는 효과를 인터페이스 뒤로 숨긴다.
-
-```ts
-// Bad: 플랫폼 API 직접 사용 (SSR/테스트에서 깨짐)
-function saveUserPreference(key: string, value: string) {
-  localStorage.setItem(key, value);
-}
-```
 
 ```ts
 // Good: 인터페이스로 추상화
@@ -294,24 +347,71 @@ export const memoryStorage: Storage = (() => {
 const storage = typeof window !== "undefined" ? browserStorage : memoryStorage;
 
 function saveUserPreference(key: string, value: string, storage: Storage) {
-  storage.set(key, value);
+  storage.set(key, value); // SSR에서도 안전
 }
 ```
 
-**프론트 적용**: localStorage, fetch 같은 플랫폼 API를 직접 쓰지 말고, 인터페이스로 감싸서 SSR/테스트 환경에서도 동작하게 만든다.
+**해결된 것:**
 
-**한계·완화**: DI 컨테이너는 프론트에서 오버헤드가 크다. Storage, Logger 같은 소수 인터페이스만 추상화하고, 나머지는 환경 분기(typeof window)로 처리한다.
+- SSR에서 에러 없음 (memoryStorage 사용)
+- 테스트 시 memoryStorage mock으로 간단히 대체
+- 환경 분기 코드가 한 곳에만 집중
+
+**언제 적용하나:**
+
+- localStorage, sessionStorage 같은 플랫폼 API
+- fetch, Logger 같은 환경 의존적 효과
+- SSR/테스트 환경 지원 필요
+
+**언제 과한가:**
+
+- 모든 곳에 DI 컨테이너 도입 (번들 크기 증가, 복잡도 상승)
+- Storage, Logger 외에는 환경 분기(**typeof window**)로 충분
 
 ---
 
-## 7. 한계와 트레이드오프
+## 3. 정리 및 독자 액션
 
-> SOLID의 목적은 프론트에서 "클린 코드"가 아니라,  
+> SOLID의 목적은 프론트에서 "클린 코드"가 아니라,
 > **변경 비용을 최소화하는 UI 경계를 만드는 것**이다.
 
-- **추상화 남용** → 번들/런타임 비용 상승, 온보딩 난도 증가.
-- **Prop/훅 세분화** → 사용성 저하 가능. DX를 확인하며 점진적으로 분리해야 한다.
-- **DIP 남용** → 프론트에서는 컨테이너/주입 코드가 오버헤드. 제품 성숙도에 맞춰 최소한으로 도입.
-- **디자인 시스템 강제** → 실험 속도 둔화. 초기에는 토큰부터, 이후 컴포넌트/패턴으로 확장.
+### 지금 당장 할 수 있는 것
 
-**결국 프론트엔드 SOLID는 완벽한 설계 이론이 아니라, 변화를 가장 싸고 안정적으로 흡수하기 위한 UI 전략이다.**
+1. **300줄 넘는 컴포넌트 찾기**
+
+   - 데이터 fetching + 변환 로직을 훅으로 분리
+   - 한 파일에서 useState/useEffect 5개 넘으면 분리 신호
+
+2. **div 버튼을 button 태그로 교체**
+
+   - **<div onClick>** → **<button>**
+   - 키보드 테스트: Tab으로 포커스 → Enter로 동작 확인
+
+3. **거대한 객체 전달 줄이기**
+   - UserCard가 User 전체를 받는가? → name, avatar만 받도록
+   - props가 5개 넘으면 실제로 다 쓰는지 확인
+
+### 팀에 제안할 것
+
+1. **디자인 시스템 Button에 접근성 체크리스트**
+
+   - 키보드 동작 (Enter/Space)
+   - 포커스 스타일
+   - ARIA label
+
+2. **필터/정렬이 많은 리스트는 함수 주입 패턴 고려**
+
+   - filterType이 4개 넘으면 filterFn 주입으로 전환
+   - 조합 필터 필요하면 함수 주입 필수
+
+3. **SSR 프로젝트는 Storage 인터페이스 도입**
+   - localStorage 직접 사용 금지
+   - **lib/storage.ts**에 browserStorage/memoryStorage 구현
+
+### 과하게 하지 말 것
+
+1. **모든 컴포넌트에 DI 적용** → Storage, Logger만
+2. **useQuery를 한 번만 감싸는 훅** → 로직 10줄 이상일 때만
+3. **3개 이하 props를 무리하게 쪼개기** → 실제 재사용될 때만
+
+**SOLID는 완벽한 설계 이론이 아니라, 변화를 가장 싸고 안전하게 흡수하기 위한 UI 전략이다.**
